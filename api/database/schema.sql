@@ -1,3 +1,36 @@
+-- Status change logs table (history of status changes)
+CREATE TABLE tb_status_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    repair_request_id INT NOT NULL,
+    old_status ENUM('pending', 'assigned', 'in-progress', 'completed') NOT NULL,
+    new_status ENUM('pending', 'assigned', 'in-progress', 'completed') NOT NULL,
+    changed_by CHAR(4) NOT NULL,
+    changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (repair_request_id) REFERENCES tb_repair_requests(id),
+    FOREIGN KEY (changed_by) REFERENCES tb_users(id)
+);
+
+-- Notes table (for repair request comments/history)
+CREATE TABLE tb_notes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    repair_request_id INT NOT NULL,
+    note TEXT NOT NULL,
+    created_by CHAR(4) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (repair_request_id) REFERENCES tb_repair_requests(id),
+    FOREIGN KEY (created_by) REFERENCES tb_users(id)
+);
+
+-- Images table (for repair request evidence images)
+CREATE TABLE tb_images (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    repair_request_id INT NOT NULL,
+    image_url VARCHAR(255) NOT NULL,
+    uploaded_by CHAR(4) NOT NULL,
+    uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (repair_request_id) REFERENCES tb_repair_requests(id),
+    FOREIGN KEY (uploaded_by) REFERENCES tb_users(id)
+);
 -- Equipment Repair System Database Schema
 
 CREATE DATABASE IF NOT EXISTS equipment_repair;
@@ -21,12 +54,12 @@ CREATE TABLE tb_users (
     FOREIGN KEY (type_id) REFERENCES tb_type(id)
 );
 
--- Equipment table
+-- Equipment table (focus on computer only, for LC/UD, floors 1-3, rooms LC207, LC205, LC204)
 CREATE TABLE tb_equipment (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
     code VARCHAR(50) UNIQUE NOT NULL,
-    type ENUM('computer', 'ac', 'projector', 'electrical', 'router') NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    type ENUM('computer') NOT NULL,
     status ENUM('working', 'repair', 'maintenance') DEFAULT 'working',
     position_x FLOAT DEFAULT 0,
     position_y FLOAT DEFAULT 0,
@@ -34,32 +67,56 @@ CREATE TABLE tb_equipment (
     side VARCHAR(20),
     row_number INT,
     seat VARCHAR(10),
-    room VARCHAR(50),
-    building VARCHAR(50),
-    floor INT,
+    room VARCHAR(20) NOT NULL,
+    building VARCHAR(10) NOT NULL,
+    floor INT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
--- Repair requests table
 CREATE TABLE tb_repair_requests (
     id INT AUTO_INCREMENT PRIMARY KEY,
     equipment_code VARCHAR(50) NOT NULL,
     equipment_name VARCHAR(100) NOT NULL,
-    location VARCHAR(200) NOT NULL,
+    building VARCHAR(10) NOT NULL,
+    floor INT NOT NULL,
+    room VARCHAR(20) NOT NULL,
     status ENUM('pending', 'assigned', 'in-progress', 'completed') DEFAULT 'pending',
     description TEXT NOT NULL,
     reporter VARCHAR(100) NOT NULL,
     assigned_to CHAR(4) NULL,
     priority ENUM('low', 'medium', 'high') DEFAULT 'medium',
-    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    report_date DATE NOT NULL,
     assigned_date TIMESTAMP NULL,
     completed_date TIMESTAMP NULL,
     images TEXT, -- JSON array of image URLs
     notes TEXT, -- JSON array of notes
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (assigned_to) REFERENCES tb_users(id) ON DELETE SET NULL
+    FOREIGN KEY (assigned_to) REFERENCES tb_users(id) ON DELETE SET NULL,
+    FOREIGN KEY (equipment_code) REFERENCES tb_equipment(code)
+);
+
+-- Notes table (for repair request comments/history)
+CREATE TABLE tb_notes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    repair_request_id INT NOT NULL,
+    note TEXT NOT NULL,
+    created_by CHAR(4) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (repair_request_id) REFERENCES tb_repair_requests(id),
+    FOREIGN KEY (created_by) REFERENCES tb_users(id)
+);
+
+-- Images table (for repair request evidence images)
+CREATE TABLE tb_images (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    repair_request_id INT NOT NULL,
+    image_url VARCHAR(255) NOT NULL,
+    uploaded_by CHAR(4) NOT NULL,
+    uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (repair_request_id) REFERENCES tb_repair_requests(id),
+    FOREIGN KEY (uploaded_by) REFERENCES tb_users(id)
 );
 
 -- Insert default types
@@ -75,14 +132,22 @@ INSERT INTO tb_users (id, username, password, type_id, name) VALUES
 ('0202', 'tech2', '3456', '02', 'Jane Doe');
 
 
--- Insert sample equipment
-INSERT INTO tb_equipment (name, code, type, status, position_x, position_y, table_number, room, building, floor) VALUES
-('Computer Lab PC 01', 'PC-001', 'computer', 'working', 100, 150, 1, 'Computer Lab', 'Building A', 2),
-('Air Conditionerit 1', 'AC-001', 'ac', 'repair', 50, 50, NULL, 'Computer Lab', 'Building A', 2),
-('Projector Main', 'PROJ-001', 'projector', 'working', 200, 100, NULL, 'Computer Lab', 'Building A', 2);
+
+-- Insert sample computer equipment (LC, UD buildings, floors 1-3, rooms LC207, LC205, LC204)
+INSERT INTO tb_equipment (code, name, type, status, room, building, floor) VALUES
+('PC-LC207-01', 'คอมพิวเตอร์ 01', 'computer', 'working', 'LC207', 'LC', 2),
+('PC-LC207-02', 'คอมพิวเตอร์ 02', 'computer', 'repair', 'LC207', 'LC', 2),
+('PC-LC205-01', 'คอมพิวเตอร์ 03', 'computer', 'working', 'LC205', 'LC', 2),
+('PC-LC204-01', 'คอมพิวเตอร์ 04', 'computer', 'maintenance', 'LC204', 'LC', 2),
 
 
--- Insert sample repair requests
-INSERT INTO tb_repair_requests (equipment_code, equipment_name, location, status, description, reporter, assigned_to, priority) VALUES
-('AC-001', 'Air Conditioner Unit 1', 'Computer Lab, Building A, Floor 2', 'assigned', 'Air conditioner not cooling properly', 'Teacher A', '0201', 'high'),
-('PC-001', 'Computer Lab PC 01', 'Computer Lab, Building A, Floor 2', 'pending', 'Computer won\'t start up', 'Student B', NULL, 'medium');
+
+
+-- Insert sample repair requests (map to above equipment, with building/floor/room fields)
+INSERT INTO tb_repair_requests (equipment_code, equipment_name, building, floor, room, status, description, reporter, assigned_to, priority, report_date)
+VALUES
+('PC-LC207-01', 'คอมพิวเตอร์ 01', 'LC', 2, 'LC207', 'pending', 'คอมพิวเตอร์เปิดไม่ติด มีเสียง beep', 'อาจารย์สมชาย', NULL, 'high', '2024-01-15'),
+('PC-LC207-02', 'คอมพิวเตอร์ 02', 'LC', 2, 'LC207', 'assigned', 'จอคอมพิวเตอร์ไม่แสดงผล มีไฟกระพริบ', 'อาจารย์สมหญิง', '0201', 'medium', '2024-01-14'),
+('PC-LC205-01', 'คอมพิวเตอร์ 03', 'LC', 2, 'LC205', 'in-progress', 'คอมพิวเตอร์รีสตาร์ทเองบ่อย', 'อาจารย์สมศรี', '0202', 'high', '2024-01-13'),
+('PC-LC204-01', 'คอมพิวเตอร์ 04', 'LC', 2, 'LC204', 'completed', 'คอมพิวเตอร์เปิดติดแต่เข้า Windows ไม่ได้', 'อาจารย์สมหมาย', '0201', 'low', '2024-01-12'),
+
