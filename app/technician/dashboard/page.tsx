@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Dialog, DialogContent, DialogTrigger,DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogTrigger, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -63,7 +63,7 @@ export default function TechnicianDashboard() {
   useEffect(() => {
     if (!isMounted) return;
     // Check authentication from localStorage (only on client)
-    const userStr = localStorage.getItem("user");
+  const userStr = localStorage.getItem("user");
     if (!userStr) {
       router.push("/");
       return;
@@ -74,12 +74,23 @@ export default function TechnicianDashboard() {
       router.push("/");
       return;
     }
-    // Load tasks assigned to current technician
-    const allRequests = storage.getRequests();
-    const technicianTasks = allRequests.filter(
-      (request) => request.assignedTo === user?.name || request.status === "pending",
-    );
-    setTasks(technicianTasks);
+
+    // Fetch tasks from API backed by MySQL (show ALL requests by default)
+    const fetchTasks = async () => {
+      try {
+        const res = await fetch('/api/repair-requests');
+        if (!res.ok) throw new Error('Failed to fetch');
+        const allRequests = await res.json();
+  // Show all requests by default for the dashboard; statusFilter/search will narrow on UI
+  setTasks(allRequests);
+      } catch (e) {
+        // fallback to local storage if API fails
+        const allRequests = storage.getRequests();
+        setTasks(allRequests);
+      }
+    };
+
+    fetchTasks();
   }, [router, isMounted]);
 
   if (!isMounted) return null;
@@ -157,32 +168,47 @@ export default function TechnicianDashboard() {
     }
   }
 
-  const updateTaskStatus = (taskId: string, newStatus: RepairRequest["status"], notes?: string) => {
-    const updates: Partial<RepairRequest> = {
-      status: newStatus,
-      assignedTo: currentUser?.name,
+  const updateTaskStatus = async (taskId: string, newStatus: RepairRequest["status"], notes?: string) => {
+    // Check authentication from localStorage
+    const userStr = typeof window !== "undefined" ? localStorage.getItem("user") : null;
+    if (!userStr) {
+      router.push("/");
+      return;
     }
-            // Check authentication from localStorage
-            const userStr = typeof window !== "undefined" ? localStorage.getItem("user") : null;
-            if (!userStr) {
-              router.push("/");
-              return;
-            }
-            const user = JSON.parse(userStr);
-            setCurrentUser(user);
-            if (user.type_id !== "02") {
-              router.push("/");
-              return;
-            }
+    const user = JSON.parse(userStr);
+    setCurrentUser(user);
+    if (user.type_id !== "02") {
+      router.push("/");
+      return;
+    }
 
-    // Refresh tasks
-    const allRequests = storage.getRequests()
-    const technicianTasks = allRequests.filter(
-      (request) => request.assignedTo === currentUser?.name || request.status === "pending",
-    )
-    setTasks(technicianTasks)
+    try {
+      const res = await fetch(`/api/repair-requests/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus, notes, assignedTo: user.user_id || user.userId || user.id || null, changedBy: user.user_id || user.userId || user.id || null })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showNotification('success', 'อัปเดตสถานะสำเร็จ');
+      } else {
+        showNotification('error', data.message || 'ไม่สามารถอัปเดตสถานะได้');
+      }
+    } catch (e) {
+      showNotification('error', 'เกิดข้อผิดพลาดในการอัปเดตสถานะ');
+    }
 
-    showNotification("success", "อัปเดตสถานะสำเร็จ")
+    // Refresh tasks from server (best effort)
+    try {
+      const resp = await fetch('/api/repair-requests');
+      if (resp.ok) {
+        const allRequests = await resp.json();
+  const technicianTasks = allRequests.filter((request: any) => request.assignedTo === (user.user_id || user.userId || user.id) || request.status === 'pending');
+        setTasks(technicianTasks);
+      }
+    } catch (e) {
+      // fallback: keep existing tasks
+    }
   }
 
   const filteredTasks = tasks.filter((task) => {
@@ -646,8 +672,8 @@ function TaskDetailModal({
             <Wrench className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-gray-900">รายละเอียดงานซ่อม #{task.id}</h2>
-            <p className="text-sm text-gray-600">ข้อมูลครุภัณฑ์และการซ่อมบำรุง</p>
+            <DialogTitle className="text-xl font-bold text-gray-900">รายละเอียดงานซ่อม #{task.id}</DialogTitle>
+            <DialogDescription className="text-sm text-gray-600">ข้อมูลครุภัณฑ์และการซ่อมบำรุง</DialogDescription>
           </div>
         </div>
       </div>

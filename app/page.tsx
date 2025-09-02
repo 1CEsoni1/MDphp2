@@ -42,7 +42,8 @@ export default function LoginPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password })
       });
-      const data = await res.json();
+  const data = await res.json();
+  console.info('login response', data);
       if (data.success) {
         // ตรวจสอบเลข 2 ตัวแรกของ id
         if ((userType === "admin" && data.user_id.startsWith("01")) || (userType === "technician" && data.user_id.startsWith("02"))) {
@@ -60,7 +61,9 @@ export default function LoginPage() {
           showNotification("error", "ประเภทผู้ใช้งานไม่ถูกต้อง");
         }
       } else {
-        showNotification("error", data.message || "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง");
+        // Prefer explicit error from API for debugging
+        const err = data.error || data.message || "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง";
+        showNotification("error", err);
       }
     } catch (error) {
       showNotification("error", "เกิดข้อผิดพลาดในการเข้าสู่ระบบ");

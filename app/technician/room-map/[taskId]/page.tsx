@@ -219,7 +219,7 @@ const lc207Equipment: Equipment[] = [
 
 ]
 
-export default function RoomMapPage({ params }: { params: { taskId: string } }) {
+export default function RoomMapPage({ params }: any) {
   const router = useRouter()
   const [selectedBuilding, setSelectedBuilding] = useState("lc")
   const [selectedFloor, setSelectedFloor] = useState("floor-2")
