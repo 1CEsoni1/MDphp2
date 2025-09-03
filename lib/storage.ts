@@ -127,16 +127,24 @@ export const storage = {
   // Current user
   getCurrentUser: (): User | null => {
     if (typeof window === "undefined") return null
-    const user = localStorage.getItem("currentUser")
-    return user ? JSON.parse(user) : null
+    // support legacy key 'user' as well as 'currentUser'
+    const userJson = localStorage.getItem("currentUser") || localStorage.getItem("user")
+    return userJson ? JSON.parse(userJson) : null
   },
 
   setCurrentUser: (user: User | null) => {
     if (typeof window !== "undefined") {
-      if (user) {
-        localStorage.setItem("currentUser", JSON.stringify(user))
-      } else {
-        localStorage.removeItem("currentUser")
+      try {
+        if (user) {
+          localStorage.setItem("currentUser", JSON.stringify(user))
+          // keep legacy key for compatibility
+          localStorage.setItem("user", JSON.stringify(user))
+        } else {
+          localStorage.removeItem("currentUser")
+          localStorage.removeItem("user")
+        }
+      } catch (e) {
+        // ignore storage errors in restricted environments
       }
     }
   },

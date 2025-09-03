@@ -37,6 +37,7 @@ import {
   X,
 } from "lucide-react"
 // import { auth } from "@/lib/auth"
+import { auth } from "@/lib/auth"
 import { storage, type RepairRequest } from "@/lib/storage"
 import { Notification } from "@/components/notification"
 
@@ -62,17 +63,12 @@ export default function TechnicianDashboard() {
 
   useEffect(() => {
     if (!isMounted) return;
-    // Check authentication from localStorage (only on client)
-  const userStr = localStorage.getItem("user");
-    if (!userStr) {
-      router.push("/");
-      return;
-    }
-    const user = JSON.parse(userStr);
-    setCurrentUser(user);
-    if (user.type_id !== "02") {
-      router.push("/");
-      return;
+    // Check authentication using auth helper
+    const user = auth.getCurrentUser()
+    setCurrentUser(user)
+    if (!auth.isAuthenticated() || !auth.isTechnician()) {
+      router.push("/")
+      return
     }
 
     // Fetch tasks from API backed by MySQL (show ALL requests by default)
@@ -169,24 +165,19 @@ export default function TechnicianDashboard() {
   }
 
   const updateTaskStatus = async (taskId: string, newStatus: RepairRequest["status"], notes?: string) => {
-    // Check authentication from localStorage
-    const userStr = typeof window !== "undefined" ? localStorage.getItem("user") : null;
-    if (!userStr) {
-      router.push("/");
-      return;
+    // Check authentication via helper
+    const user = auth.getCurrentUser()
+    if (!user) {
+      router.push("/")
+      return
     }
-    const user = JSON.parse(userStr);
-    setCurrentUser(user);
-    if (user.type_id !== "02") {
-      router.push("/");
-      return;
-    }
+    setCurrentUser(user)
 
     try {
       const res = await fetch(`/api/repair-requests/${taskId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus, notes, assignedTo: user.user_id || user.userId || user.id || null, changedBy: user.user_id || user.userId || user.id || null })
+  body: JSON.stringify({ status: newStatus, notes, assignedTo: (user as any).user_id || (user as any).userId || user.id || null, changedBy: (user as any).user_id || (user as any).userId || user.id || null })
       });
       const data = await res.json();
       if (res.ok && data.success) {
@@ -203,7 +194,7 @@ export default function TechnicianDashboard() {
       const resp = await fetch('/api/repair-requests');
       if (resp.ok) {
         const allRequests = await resp.json();
-  const technicianTasks = allRequests.filter((request: any) => request.assignedTo === (user.user_id || user.userId || user.id) || request.status === 'pending');
+  const technicianTasks = allRequests.filter((request: any) => request.assignedTo === ((user as any).user_id || (user as any).userId || user.id) || request.status === 'pending');
         setTasks(technicianTasks);
       }
     } catch (e) {
@@ -646,6 +637,7 @@ function TaskDetailModal({
   onUpdateStatus: (taskId: string, status: RepairRequest["status"], notes?: string) => void
   currentUser: any
 }) {
+  const router = useRouter()
   const [notes, setNotes] = useState("")
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
 
@@ -660,7 +652,8 @@ function TaskDetailModal({
   }
 
   const openRoomMap = () => {
-    window.open(`/technician/room-map/${task.id}`, "_blank")
+  // Use client-side navigation so auth/localStorage state is preserved
+  router.push(`/technician/room-map/${task.id}`)
   }
 
   return (

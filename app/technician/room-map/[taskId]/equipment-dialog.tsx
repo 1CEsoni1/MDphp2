@@ -86,8 +86,12 @@ export function EquipmentDialog({
   }
 
   const getTablePosition = (equipment: Equipment) => {
-    if (equipment.tableNumber === 0) return "อุปกรณ์พิเศษ"
-    return `โต๊ะที่ ${equipment.tableNumber} (ฝั่ง${equipment.side === "left" ? "ซ้าย" : "ขวา"} แถว ${equipment.row} ที่นั่ง ${equipment.seat})`
+    const table = equipment.tableNumber && equipment.tableNumber > 0 ? `โต๊ะที่ ${equipment.tableNumber}` : "อุปกรณ์พิเศษ/ไม่ระบุ"
+    const side = equipment.side ? (equipment.side === "left" ? "ซ้าย" : "ขวา") : "ไม่ระบุ"
+    const row = equipment.row && equipment.row > 0 ? equipment.row : "-"
+    const seat = equipment.seat && equipment.seat > 0 ? equipment.seat : "-"
+    if (!equipment.tableNumber || equipment.tableNumber === 0) return table
+    return `${table} (ฝั่ง${side} แถว ${row} ที่นั่ง ${seat})`
   }
 
   return (

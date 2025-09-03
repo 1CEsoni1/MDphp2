@@ -235,30 +235,100 @@ export default function RoomMapPage({ params }: any) {
     type: "success" | "error" | "info"
     message: string
   }>({ show: false, type: "info", message: "" })
+  const [roomEquipment, setRoomEquipment] = useState<Equipment[]>(lc207Equipment)
 
   useEffect(() => {
+    // Ensure current user is up-to-date
+    setCurrentUser(auth.getCurrentUser())
+
     // Check authentication
     if (!auth.isAuthenticated() || !auth.isTechnician()) {
       router.push("/")
       return
     }
 
-    // Load task data
-    const requests = storage.getRequests()
-    const foundTask = requests.find((r) => r.id === params.taskId)
-
-    if (foundTask) {
-      setTask(foundTask)
-      // Find the equipment that needs repair
-      const equipment = lc207Equipment.find((eq) => eq.code === foundTask.equipmentCode)
-      if (equipment) {
-        setTargetEquipment(equipment)
+    // Load task data: try API first, fallback to local storage
+    const loadTask = async () => {
+      try {
+        const res = await fetch('/api/repair-requests')
+        if (res.ok) {
+          const data = await res.json()
+          const found = data.find((r: any) => String(r.id) === String(params.taskId))
+          if (found) {
+            setTask(found)
+            // set room/building/floor from task location so correct map is shown
+            if (found.location) {
+              const rawRoom = (found.location.room || "").toString()
+              // Extract code like 'LC207' from possible strings like 'ห้อง LC207' or 'LC207'
+              const match = rawRoom.match(/[A-Za-z]{1,3}\s*\d{2,3}|[A-Za-z]{1,3}\d{2,3}/i)
+              const roomCode = match ? match[0].replace(/\s+/g, "") : rawRoom
+              // map room like 'LC205' to select value 'lc205'
+              setSelectedRoom(roomCode.toLowerCase())
+              setSelectedBuilding((found.location.building || "").toLowerCase())
+              setSelectedFloor(`floor-${String(found.location.floor)}`)
+            }
+            const equipment = lc207Equipment.find((eq) => eq.code === found.equipmentCode)
+            if (equipment) setTargetEquipment(equipment)
+            return
+          }
+        }
+      } catch (e) {
+        // API may fail in dev - we'll fallback to local storage
       }
-    } else {
-      showNotification("error", "ไม่พบข้อมูลงานซ่อม")
-      setTimeout(() => router.push("/technician/dashboard"), 2000)
+
+      // Fallback: local storage
+      const requests = storage.getRequests()
+      const foundTask = requests.find((r) => String(r.id) === String(params.taskId))
+      if (foundTask) {
+        setTask(foundTask)
+        if (foundTask.location) {
+          const rawRoom = (foundTask.location.room || "").toString()
+          const match = rawRoom.match(/[A-Za-z]{1,3}\s*\d{2,3}|[A-Za-z]{1,3}\d{2,3}/i)
+          const roomCode = match ? match[0].replace(/\s+/g, "") : rawRoom
+          setSelectedRoom(roomCode.toLowerCase())
+          setSelectedBuilding((foundTask.location.building || "").toLowerCase())
+          setSelectedFloor(`floor-${String(foundTask.location.floor)}`)
+        }
+        const equipment = lc207Equipment.find((eq) => eq.code === foundTask.equipmentCode)
+        if (equipment) setTargetEquipment(equipment)
+        return
+      }
+
+      // If still not found, show notification but do not force-navigation.
+      showNotification('error', 'ไม่พบข้อมูลงานซ่อม')
+      // allow the user to use the back button or header navigation
     }
+
+    loadTask()
   }, [params.taskId, router])
+
+  // load equipment for selected room
+  useEffect(() => {
+  // Normalize selectedRoom (e.g. 'lc205' or 'LC 205' -> 'LC205')
+  const cleaned = (selectedRoom || '').toString().replace(/[^a-zA-Z0-9]/g, '')
+  const apiRoom = cleaned.toUpperCase()
+    const loadEquipment = async () => {
+      try {
+        const res = await fetch(`/api/equipment/room/${apiRoom}`)
+        if (res.ok) {
+          const data = await res.json()
+          setRoomEquipment(data)
+          // set targetEquipment if matches task
+          if (task?.equipmentCode) {
+            const found = data.find((d: any) => d.code === task.equipmentCode)
+            if (found) setTargetEquipment(found)
+          }
+          return
+        }
+      } catch (e) {
+        // ignore
+      }
+      // fallback
+      setRoomEquipment(lc207Equipment)
+    }
+
+    loadEquipment()
+  }, [selectedRoom, task])
 
   const showNotification = (type: "success" | "error" | "info", message: string) => {
     setNotification({ show: true, type, message })
@@ -321,8 +391,11 @@ export default function RoomMapPage({ params }: any) {
   }
 
   const getTablePosition = (equipment: Equipment) => {
-    if (equipment.tableNumber === 0) return "อุปกรณ์พิเศษ"
-    return `โต๊ะที่ ${equipment.tableNumber} (ฝั่ง${equipment.side === "left" ? "ซ้าย" : "ขวา"} แถว ${equipment.row})`
+    const table = equipment.tableNumber && equipment.tableNumber > 0 ? `โต๊ะที่ ${equipment.tableNumber}` : "อุปกรณ์พิเศษ/ไม่ระบุ"
+    const side = equipment.side ? (equipment.side === "left" ? "ซ้าย" : "ขวา") : "ไม่ระบุ"
+    const row = equipment.row && equipment.row > 0 ? equipment.row : "-"
+    if (!equipment.tableNumber || equipment.tableNumber === 0) return table
+    return `${table} (ฝั่ง${side} แถว ${row})`
   }
 
   // Enhanced Mobile Controls Component
@@ -686,9 +759,9 @@ export default function RoomMapPage({ params }: any) {
                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
                   <div>
                     <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
-                      <MapPin className="w-5 h-5 text-orange-600" />
-                      แผนผังห้อง LC207
-                    </CardTitle>
+                        <MapPin className="w-5 h-5 text-orange-600" />
+                        แผนผังห้อง {selectedRoom?.toUpperCase?.() || 'LC207'}
+                      </CardTitle>
                     <CardDescription className="mt-1">ห้องคอมพิวเตอร์ - คลิกที่จุดครุภัณฑ์เพื่อดูรายละเอียด</CardDescription>
                   </div>
                   {targetEquipment && (
@@ -716,8 +789,8 @@ export default function RoomMapPage({ params }: any) {
 
                     {/* Room Label */}
                     <div className="absolute top-3 sm:top-4 left-3 sm:left-4">
-                      <h3 className="text-sm sm:text-xl font-bold text-gray-700">ห้อง LC207</h3>
-                      <p className="text-xs sm:text-sm text-gray-500">ห้องคอมพิวเตอร์ (50 เครื่อง)</p>
+                      <h3 className="text-sm sm:text-xl font-bold text-gray-700">ห้อง {selectedRoom?.toUpperCase?.() || 'LC207'}</h3>
+                        <p className="text-xs sm:text-sm text-gray-500">ห้องคอมพิวเตอร์ ({roomEquipment.length} เครื่อง)</p>
                     </div>
 
                     {/* Teacher's Desk */}
@@ -746,7 +819,7 @@ export default function RoomMapPage({ params }: any) {
                     </div>
 
                     {/* Equipment Points */}
-                    {lc207Equipment.map((equipment) => (
+                    {roomEquipment.map((equipment) => (
                       <div
                         key={equipment.id}
                         className={`absolute w-6 h-6 sm:w-10 sm:h-10 rounded-full text-white flex items-center justify-center transition-all hover:scale-110 cursor-pointer ${getStatusColor(equipment)} border-2 border-white`}
@@ -859,37 +932,37 @@ export default function RoomMapPage({ params }: any) {
                   <div className="p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg border border-blue-200 shadow-sm">
                     <h4 className="text-sm font-semibold text-blue-800 mb-3 flex items-center gap-2">
                       <BarChart3 className="w-4 h-4" />
-                      สถิติห้อง LC207
+                      สถิติห้อง {selectedRoom?.toUpperCase?.() || 'LC207'}
                     </h4>
                     <div className="space-y-2">
                       <div className="flex justify-between">
                         <span className="text-sm text-blue-700">ครุภัณฑ์ทั้งหมด:</span>
-                        <span className="text-sm font-medium">{lc207Equipment.length} รายการ</span>
+                        <span className="text-sm font-medium">{roomEquipment.length} รายการ</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-sm text-blue-700">คอมพิวเตอร์:</span>
-                        <span className="text-sm font-medium">50 เครื่อง</span>
+                        <span className="text-sm font-medium">{roomEquipment.filter((eq) => eq.type === 'computer').length} เครื่อง</span>
                       </div>
                       <div className="hidden sm:block">
                         <div className="flex justify-between">
                           <span className="text-sm text-blue-700">ฝั่งซ้าย:</span>
-                          <span className="text-sm font-medium">25 เครื่อง (โต๊ะ 1-25)</span>
+                          <span className="text-sm font-medium">{Math.ceil(roomEquipment.filter((eq) => eq.type === 'computer').length/2)} เครื่อง (โต๊ะ 1-{Math.ceil(roomEquipment.filter((eq) => eq.type === 'computer').length/2)})</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-sm text-blue-700">ฝั่งขวา:</span>
-                          <span className="text-sm font-medium">25 เครื่อง (โต๊ะ 26-50)</span>
+                          <span className="text-sm font-medium">{Math.floor(roomEquipment.filter((eq) => eq.type === 'computer').length/2)} เครื่อง (โต๊ะ {Math.ceil(roomEquipment.filter((eq) => eq.type === 'computer').length/2)+1}-{Math.ceil(roomEquipment.filter((eq) => eq.type === 'computer').length/2)+Math.floor(roomEquipment.filter((eq) => eq.type === 'computer').length/2)})</span>
                         </div>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-sm text-blue-700">ใช้งานได้:</span>
                         <span className="text-sm font-medium text-green-600">
-                          {lc207Equipment.filter((eq) => eq.status === "working").length} รายการ
+                          {roomEquipment.filter((eq) => eq.status === "working").length} รายการ
                         </span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-sm text-blue-700">ต้องซ่อม:</span>
                         <span className="text-sm font-medium text-red-600">
-                          {lc207Equipment.filter((eq) => eq.status === "repair").length} รายการ
+                          {roomEquipment.filter((eq) => eq.status === "repair").length} รายการ
                         </span>
                       </div>
                     </div>

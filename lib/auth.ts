@@ -25,12 +25,16 @@ export const auth = {
   },
 
   isAdmin: (): boolean => {
-    const user = storage.getCurrentUser()
-    return user?.type === "admin"
+  const user = storage.getCurrentUser()
+  // Accept either legacy `type` or API `type_id` (e.g. '01')
+  const t = (user as any)?.type || (user as any)?.type_id || (user as any)?.typeId
+  return t === "admin" || t === "01"
   },
 
   isTechnician: (): boolean => {
-    const user = storage.getCurrentUser()
-    return user?.type === "technician"
+  const user = storage.getCurrentUser()
+  // Accept either legacy `type` or API `type_id` (e.g. '02')
+  const t = (user as any)?.type || (user as any)?.type_id || (user as any)?.typeId
+  return t === "technician" || t === "02"
   },
 }
