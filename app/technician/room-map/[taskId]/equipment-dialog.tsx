@@ -27,6 +27,7 @@ interface EquipmentDialogProps {
   onClose: () => void
   onStatusUpdate: (equipmentId: string, newStatus: "working" | "repair" | "maintenance") => void
   isTargetEquipment?: boolean
+  taskStatus?: string
 }
 
 export function EquipmentDialog({
@@ -35,6 +36,7 @@ export function EquipmentDialog({
   onClose,
   onStatusUpdate,
   isTargetEquipment = false,
+  taskStatus,
 }: EquipmentDialogProps) {
   if (!equipment) return null
 
@@ -159,7 +161,7 @@ export function EquipmentDialog({
           )}
 
           {/* Status Update */}
-          {isTargetEquipment && (
+          {isTargetEquipment && (taskStatus as any) !== 'completed' && (
             <div className="pt-4 border-t">
               <label className="text-sm font-medium mb-2 block">อัปเดตสถานะ</label>
               <div className="flex gap-2 flex-wrap">

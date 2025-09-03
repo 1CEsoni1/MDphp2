@@ -173,6 +173,14 @@ export default function TechnicianDashboard() {
     }
     setCurrentUser(user)
 
+    // Prevent updating work assigned to another user
+    const userId = (user as any).user_id || (user as any).userId || user.id
+    const taskObj = tasks.find((t) => String(t.id) === String(taskId)) || selectedTask
+    if (taskObj && taskObj.assignedTo && String(taskObj.assignedTo) !== String(userId)) {
+      showNotification('error', 'คุณไม่สามารถอัปเดตสถานะของงานที่มอบหมายให้ผู้อื่นได้')
+      return
+    }
+
     try {
       const res = await fetch(`/api/repair-requests/${taskId}`, {
         method: 'PATCH',
@@ -199,6 +207,62 @@ export default function TechnicianDashboard() {
       }
     } catch (e) {
       // fallback: keep existing tasks
+    }
+  }
+
+  const assignToMe = async (taskId: string) => {
+    const user = auth.getCurrentUser()
+    if (!user) {
+      router.push('/')
+      return
+    }
+    // Optimistic update: mark task as assigned locally first
+    const userId = (user as any).user_id || (user as any).userId || user.id
+    const prevTasks = tasks
+    // Do not allow claiming if already assigned to someone else
+    const existing = prevTasks.find((t) => String(t.id) === String(taskId))
+    if (existing && existing.assignedTo && String(existing.assignedTo) !== String(userId)) {
+      showNotification('error', 'งานนี้มีผู้รับผิดชอบแล้ว')
+      return
+    }
+
+    const updated: RepairRequest[] = tasks.map((t) => (t.id === taskId ? { ...t, assignedTo: userId, status: 'assigned' as RepairRequest['status'] } : t))
+    setTasks(updated)
+    // if selectedTask is the same, update it too
+    if (selectedTask && selectedTask.id === taskId) {
+      setSelectedTask({ ...selectedTask, assignedTo: userId, status: 'assigned' })
+    }
+
+    try {
+      const res = await fetch(`/api/repair-requests/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignedTo: userId, status: 'assigned', changedBy: userId })
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        showNotification('success', 'รับงานเรียบร้อยแล้ว')
+        // optionally refresh from server to reconcile
+        try {
+          const resp = await fetch('/api/repair-requests')
+          if (resp.ok) {
+            const allRequests = await resp.json()
+            setTasks(allRequests)
+          }
+        } catch (e) {
+          // ignore
+        }
+  } else {
+        // rollback optimistic change
+        setTasks(prevTasks)
+        if (selectedTask && selectedTask.id === taskId) setSelectedTask(prevTasks.find((p) => p.id === taskId) || null)
+        showNotification('error', data.message || 'ไม่สามารถรับงานได้')
+      }
+    } catch (e) {
+      // rollback
+      setTasks(prevTasks)
+      if (selectedTask && selectedTask.id === taskId) setSelectedTask(prevTasks.find((p) => p.id === taskId) || null)
+      showNotification('error', 'เกิดข้อผิดพลาด')
     }
   }
 
@@ -584,12 +648,14 @@ export default function TechnicianDashboard() {
                           task={selectedTask}
                           onUpdateStatus={updateTaskStatus}
                           currentUser={currentUser}
+                            onAssignToMe={assignToMe}
                         />
                       )}
                     </DialogContent>
                   </Dialog>
 
-                  {(task.status === "assigned" || task.status === "pending") && (
+                  {/* Show start button only if task is assigned to current user */}
+                  {task.assignedTo && currentUser && String(task.assignedTo) === String((currentUser as any).user_id || (currentUser as any).userId || (currentUser as any).id) && (
                     <Button
                       size="sm"
                       className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white"
@@ -598,6 +664,10 @@ export default function TechnicianDashboard() {
                       <Wrench className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
                       <span className="text-xs sm:text-sm hidden sm:inline">เริ่มซ่อม</span>
                     </Button>
+                  )}
+                  {/* If task is pending (no assignedTo), allow claiming */}
+                  {!task.assignedTo && (
+                    <Button size="sm" variant="outline" onClick={() => assignToMe(task.id)}>รับงาน</Button>
                   )}
                 </div>
               </CardContent>
@@ -632,10 +702,12 @@ function TaskDetailModal({
   task,
   onUpdateStatus,
   currentUser,
+  onAssignToMe,
 }: {
   task: RepairRequest
   onUpdateStatus: (taskId: string, status: RepairRequest["status"], notes?: string) => void
   currentUser: any
+  onAssignToMe?: (taskId: string) => void
 }) {
   const router = useRouter()
   const [notes, setNotes] = useState("")
@@ -733,22 +805,30 @@ function TaskDetailModal({
         {/* Status Update */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">อัปเดตสถานะงาน</h3>
-          <div className="flex flex-col sm:flex-row gap-3 mb-5">
-            <Button
-              className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 flex-1 sm:flex-none"
-              onClick={() => handleStatusUpdate("in-progress")}
-            >
-              <Wrench className="w-4 h-4 mr-2" />
-              เริ่มซ่อม
-            </Button>
-            <Button
-              className="bg-green-600 hover:bg-green-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 flex-1 sm:flex-none"
-              onClick={() => handleStatusUpdate("completed")}
-            >
-              <CheckCircle className="w-4 h-4 mr-2" />
-              ซ่อมเสร็จแล้ว
-            </Button>
-          </div>
+          {(() => {
+            const ownerId = (currentUser as any)?.user_id || (currentUser as any)?.userId || (currentUser as any)?.id
+            const isOwner = task.assignedTo && String(task.assignedTo) === String(ownerId)
+            if (task.status === 'completed') return (<div className="mb-5 text-sm text-gray-600">งานนี้สถานะ: เสร็จสิ้น</div>)
+            if (!isOwner) return (<div className="mb-5 text-sm text-gray-600">คุณไม่มีสิทธิ์อัปเดตสถานะงานนี้</div>)
+            return (
+              <div className="flex flex-col sm:flex-row gap-3 mb-5">
+                <Button
+                  className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 flex-1 sm:flex-none"
+                  onClick={() => handleStatusUpdate("in-progress")}
+                >
+                  <Wrench className="w-4 h-4 mr-2" />
+                  เริ่มซ่อม
+                </Button>
+                <Button
+                  className="bg-green-600 hover:bg-green-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 flex-1 sm:flex-none"
+                  onClick={() => handleStatusUpdate("completed")}
+                >
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  ซ่อมเสร็จแล้ว
+                </Button>
+              </div>
+            )
+          })()}
 
           <div className="space-y-2">
             <Label className="text-sm font-medium text-gray-700">หมายเหตุ</Label>
@@ -760,6 +840,13 @@ function TaskDetailModal({
               rows={3}
             />
           </div>
+          {task.status === 'pending' && onAssignToMe && (
+            <div className="mt-3">
+              <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white" onClick={() => onAssignToMe(task.id)}>
+                รับงาน
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* Image Upload */}

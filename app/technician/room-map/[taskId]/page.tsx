@@ -219,6 +219,51 @@ const lc207Equipment: Equipment[] = [
 
 ]
 
+// Generate default layout for similar rooms by copying lc207 layout
+const generateEquipmentForRoom = (roomCode: string): Equipment[] => {
+  const room = (roomCode || 'LC207').toString().toUpperCase()
+  // if requested room is LC207 return original
+  if (room === 'LC207') return lc207Equipment
+
+  // map lc207Equipment to new room: adjust code prefix and room field
+  // Use a grid-based generator derived from LC207 layout; compute positions by side/row/seat
+  const roomGridParams: Record<string, { leftX: number; rightX: number; colSpacing: number; topY: number; rowSpacing: number }> = {
+    LC207: { leftX: 15, rightX: 65, colSpacing: 5.5, topY: 30, rowSpacing: 10 },
+    LC205: { leftX: 16, rightX: 64, colSpacing: 5.8, topY: 28, rowSpacing: 10 },
+    LC204: { leftX: 15, rightX: 66, colSpacing: 5.5, topY: 29, rowSpacing: 10 },
+  }
+
+  const params = roomGridParams[room] || roomGridParams['LC207']
+
+  return lc207Equipment.map((eq, idx) => {
+    const newCode = eq.code.replace(/LC207/i, room)
+
+    // If the equipment has a table number (>0), compute grid position based on side/row/seat
+    let position = { ...eq.position }
+    if (eq.tableNumber && eq.tableNumber > 0) {
+      const seat = typeof eq.seat === 'number' && eq.seat > 0 ? eq.seat : 1
+      const row = typeof eq.row === 'number' && eq.row > 0 ? eq.row : 1
+      const colIndex = seat - 1
+      const baseX = eq.side === 'right' ? params.rightX : params.leftX
+      const x = Math.round(baseX + colIndex * params.colSpacing)
+      const y = Math.round(params.topY + (row - 1) * params.rowSpacing)
+      position = { x: Math.max(2, Math.min(98, x)), y: Math.max(2, Math.min(98, y)) }
+    } else {
+      // Non-table items (e.g., projector) keep a sensible default near top center
+      position = { x: 50, y: 18 }
+    }
+
+    return {
+      ...eq,
+      id: String(idx + 1) + '-' + room,
+      code: newCode,
+      room,
+      position,
+      tableNumber: eq.tableNumber,
+    }
+  })
+}
+
 export default function RoomMapPage({ params }: any) {
   const router = useRouter()
   const [selectedBuilding, setSelectedBuilding] = useState("lc")
@@ -309,9 +354,11 @@ export default function RoomMapPage({ params }: any) {
   const apiRoom = cleaned.toUpperCase()
     const loadEquipment = async () => {
       try {
+        console.debug('[RoomMap] loadEquipment', { selectedRoom, apiRoom, taskId: params.taskId })
         const res = await fetch(`/api/equipment/room/${apiRoom}`)
         if (res.ok) {
           const data = await res.json()
+          console.debug('[RoomMap] equipment response length', data?.length)
           setRoomEquipment(data)
           // set targetEquipment if matches task
           if (task?.equipmentCode) {
@@ -323,8 +370,8 @@ export default function RoomMapPage({ params }: any) {
       } catch (e) {
         // ignore
       }
-      // fallback
-      setRoomEquipment(lc207Equipment)
+  // fallback: generate layout for the requested room so LC205/LC204 show map
+  setRoomEquipment(generateEquipmentForRoom(apiRoom || 'LC207'))
     }
 
     loadEquipment()
@@ -545,7 +592,7 @@ export default function RoomMapPage({ params }: any) {
           <Target className="w-5 h-5 text-orange-600" />
           การดำเนินการด่วน
         </h3>
-        {targetEquipment && (
+  {targetEquipment && task?.status !== 'completed' && (
           <Button
             className="w-full bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white"
             onClick={() => {
@@ -671,6 +718,10 @@ export default function RoomMapPage({ params }: any) {
                 <div>
                   <label className="text-sm font-medium text-gray-600">ผู้แจ้ง</label>
                   <p className="text-sm">{task.reporter}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-600">ผู้รับผิดชอบ</label>
+                  <p className="text-sm">{(task as any).assignedToName || (task as any).assignedTo || 'ยังไม่ระบุ'}</p>
                 </div>
               </CardContent>
             </Card>
@@ -981,6 +1032,7 @@ export default function RoomMapPage({ params }: any) {
         onClose={() => setShowEquipmentDialog(false)}
         onStatusUpdate={updateEquipmentStatus}
         isTargetEquipment={selectedEquipment?.code === task?.equipmentCode}
+  taskStatus={task?.status}
       />
 
       <Notification
