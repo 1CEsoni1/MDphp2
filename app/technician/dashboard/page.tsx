@@ -644,8 +644,7 @@ export default function TechnicianDashboard() {
                   <span>แจ้งเมื่อ: {task.reportDate}</span>
                     <span>แจ้งเมื่อ: {task.reportDate ?? "-"}</span>
                 </div>
-                <p className="text-xs sm:text-sm text-gray-700 line-clamp-2">{task.description}</p>
-                  <p className="text-xs sm:text-sm text-gray-700 line-clamp-2">{task.description ?? ""}</p>
+                <p className="text-xs sm:text-sm text-gray-700 line-clamp-2">{task.description ?? ""}</p>
 
                 <div className="flex gap-2 pt-2">
                   <Dialog>
