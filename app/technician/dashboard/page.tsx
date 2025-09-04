@@ -38,7 +38,21 @@ import {
 } from "lucide-react"
 // import { auth } from "@/lib/auth"
 import { auth } from "@/lib/auth"
-import { storage, type RepairRequest } from "@/lib/storage"
+// Local RepairRequest shape (temporary client-side type)
+type RepairRequest = {
+  id: string
+  equipmentName?: string
+  equipmentCode?: string
+  location?: { building?: string; floor?: string; room?: string }
+  description?: string
+  priority?: "low" | "medium" | "high"
+  reporter?: string
+  assignedTo?: string
+  status?: string
+  reportDate?: string
+  completedDate?: string
+  [k: string]: any
+}
 import { Notification } from "@/components/notification"
 
 
@@ -80,9 +94,10 @@ export default function TechnicianDashboard() {
   // Show all requests by default for the dashboard; statusFilter/search will narrow on UI
   setTasks(allRequests);
       } catch (e) {
-        // fallback to local storage if API fails
-        const allRequests = storage.getRequests();
-        setTasks(allRequests);
+    // API failed — do NOT use localStorage fallback for technician area.
+    // Show an error notification and leave tasks empty so techs only work with real DB data.
+    setNotification({ show: true, type: 'error', message: 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์เพื่อดึงข้อมูลงานซ่อม' })
+    setTasks([])
       }
     };
 
@@ -105,7 +120,7 @@ export default function TechnicianDashboard() {
     }, 1500);
   }
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status?: string) => {
     switch (status) {
       case "pending":
         return (
@@ -136,7 +151,7 @@ export default function TechnicianDashboard() {
     }
   }
 
-  const getPriorityBadge = (priority: string) => {
+  const getPriorityBadge = (priority?: string) => {
     switch (priority) {
       case "high":
         return (
@@ -267,14 +282,15 @@ export default function TechnicianDashboard() {
   }
 
   const filteredTasks = tasks.filter((task) => {
+    const q = searchTerm.toLowerCase()
     const matchesSearch =
-      task.equipmentCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      `${task.location.building} ${task.location.floor} ${task.location.room}`
+      (task.equipmentCode || "").toLowerCase().includes(q) ||
+      (((task.location && `${task.location.building || ""} ${task.location.floor || ""} ${task.location.room || ""}`) as string) || "")
         .toLowerCase()
-        .includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === "all" || task.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+        .includes(q)
+    const matchesStatus = statusFilter === "all" || (task.status || "") === statusFilter
+    return matchesSearch && matchesStatus
+  })
 
   const stats = {
     total: tasks.length,
@@ -425,7 +441,7 @@ export default function TechnicianDashboard() {
       </div>
 
       {/* Priority Tasks */}
-      {tasks.filter((t) => t.priority === "high" && t.status !== "completed").length > 0 && (
+  {tasks.filter((t) => t.priority === "high" && t.status !== "completed").length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <AlertTriangle className="w-5 h-5 text-red-600" />
@@ -439,7 +455,7 @@ export default function TechnicianDashboard() {
                 <div key={task.id} className="p-3 bg-red-50 rounded-lg border border-red-200">
                   <p className="text-sm font-medium text-red-800">{task.equipmentName}</p>
                   <p className="text-xs text-red-600">
-                    {task.location.building} {task.location.room}
+                    {task.location?.building ?? ""} {task.location?.room ?? ""}
                   </p>
                   <div className="mt-2">
                     <Button
@@ -607,7 +623,7 @@ export default function TechnicianDashboard() {
                   <div className="flex-1 min-w-0">
                     <CardTitle className="text-base sm:text-lg line-clamp-1">{task.equipmentName}</CardTitle>
                     <CardDescription className="text-xs sm:text-sm text-gray-600 mt-1">
-                      รหัส: {task.equipmentCode}
+                            รหัส: {task.equipmentCode ?? ""}
                     </CardDescription>
                   </div>
                   <div className="flex flex-col items-end gap-1">
@@ -620,14 +636,16 @@ export default function TechnicianDashboard() {
                 <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-600">
                   <MapPin className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
                   <span className="line-clamp-1">
-                    {task.location.building} {task.location.floor} {task.location.room}
+                      {task.location?.building ?? ""} {task.location?.floor ?? ""} {task.location?.room ?? ""}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-600">
                   <Clock className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
                   <span>แจ้งเมื่อ: {task.reportDate}</span>
+                    <span>แจ้งเมื่อ: {task.reportDate ?? "-"}</span>
                 </div>
                 <p className="text-xs sm:text-sm text-gray-700 line-clamp-2">{task.description}</p>
+                  <p className="text-xs sm:text-sm text-gray-700 line-clamp-2">{task.description ?? ""}</p>
 
                 <div className="flex gap-2 pt-2">
                   <Dialog>
@@ -763,7 +781,7 @@ function TaskDetailModal({
             <div className="space-y-1">
               <Label className="text-sm font-medium text-gray-600">สถานที่</Label>
               <p className="text-base text-gray-700">
-                {task.location.building} {task.location.floor} {task.location.room}
+                {task.location?.building ?? ""} {task.location?.floor ?? ""} {task.location?.room ?? ""}
               </p>
             </div>
             <div className="space-y-1">
@@ -788,7 +806,7 @@ function TaskDetailModal({
             <div className="flex items-center gap-3 mb-3">
               <MapPin className="w-5 h-5 text-blue-600" />
               <span className="text-base font-semibold text-blue-900">
-                {task.location.building} {task.location.floor} {task.location.room}
+                {task.location?.building ?? ""} {task.location?.floor ?? ""} {task.location?.room ?? ""}
               </span>
             </div>
             <p className="text-sm text-blue-700 mb-4">ดูตำแหน่งที่แน่นอนของครุภัณฑ์ในห้อง</p>

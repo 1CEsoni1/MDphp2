@@ -9,7 +9,7 @@ interface Equipment {
   id: string
   name: string
   code: string
-  type: "computer" | "ac" | "projector" | "electrical" |"router"
+  type: "computer" | "ac" | "router"
   status: "working" | "repair" | "maintenance"
   position: { x: number; y: number }
   tableNumber: number
@@ -28,6 +28,7 @@ interface EquipmentDialogProps {
   onStatusUpdate: (equipmentId: string, newStatus: "working" | "repair" | "maintenance") => void
   isTargetEquipment?: boolean
   taskStatus?: string
+  canUpdate?: boolean
 }
 
 export function EquipmentDialog({
@@ -37,6 +38,7 @@ export function EquipmentDialog({
   onStatusUpdate,
   isTargetEquipment = false,
   taskStatus,
+  canUpdate = false,
 }: EquipmentDialogProps) {
   if (!equipment) return null
 
@@ -46,12 +48,8 @@ export function EquipmentDialog({
         return <Monitor className="w-5 h-5" />
       case "ac":
         return <Snowflake className="w-5 h-5" />
-      case "projector":
-        return <Zap className="w-5 h-5" />
       case "router":
         return <Wifi className="w-5 h-5" />
-      case "electrical":
-        return <Zap className="w-5 h-5" />
       default:
         return <Wrench className="w-5 h-5" />
     }
@@ -76,12 +74,8 @@ export function EquipmentDialog({
         return "คอมพิวเตอร์"
       case "ac":
         return "เครื่องปรับอากาศ"
-      case "projector":
-        return "โปรเจคเตอร์"
       case "router":
         return "Router"
-      case "electrical":
-        return "ระบบไฟฟ้า"
       default:
         return "ครุภัณฑ์"
     }
@@ -103,7 +97,7 @@ export function EquipmentDialog({
           <DialogTitle className="flex items-center gap-2">
             {getEquipmentIcon(equipment.type)}
             รายละเอียดครุภัณฑ์
-            {isTargetEquipment && (
+            {isTargetEquipment && canUpdate && (
               <Badge variant="destructive" className="ml-2">
                 🎯 เป้าหมาย
               </Badge>
@@ -160,8 +154,8 @@ export function EquipmentDialog({
             </div>
           )}
 
-          {/* Status Update */}
-          {isTargetEquipment && (taskStatus as any) !== 'completed' && (
+          {/* Status Update (only for authorized users) */}
+          {isTargetEquipment && (taskStatus as any) !== 'completed' && canUpdate && (
             <div className="pt-4 border-t">
               <label className="text-sm font-medium mb-2 block">อัปเดตสถานะ</label>
               <div className="flex gap-2 flex-wrap">
@@ -190,7 +184,7 @@ export function EquipmentDialog({
             <Button variant="outline" onClick={onClose}>
               ปิด
             </Button>
-            {isTargetEquipment && <Button className="bg-orange-600 hover:bg-orange-700">เริ่มงานซ่อม</Button>}
+            {isTargetEquipment && canUpdate && <Button className="bg-orange-600 hover:bg-orange-700">เริ่มงานซ่อม</Button>}
           </div>
         </div>
       </DialogContent>

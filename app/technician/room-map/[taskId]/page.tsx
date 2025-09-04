@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useParams } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -29,14 +29,30 @@ import {
 } from "lucide-react"
 import { EquipmentDialog } from "./equipment-dialog"
 import { auth } from "@/lib/auth"
-import { storage, type RepairRequest } from "@/lib/storage"
+// Local RepairRequest type (align with server response shape)
+type RepairRequest = {
+  id: string
+  equipmentCode?: string
+  equipmentName?: string
+  location?: { building?: string; floor?: string | number; room?: string }
+  status?: string
+  description?: string
+  reporter?: string
+  assignedTo?: string | null
+  assignedToName?: string | null
+  priority?: string
+  reportDate?: string | null
+  images?: any[]
+  completedDate?: string | null
+  notes?: string | null
+}
 import { Notification } from "@/components/notification"
 
 interface Equipment {
   id: string
   name: string
   code: string
-  type: "computer" | "ac" | "projector" | "electrical" | "router"
+  type: "computer" | "ac" | "router"
   status: "working" | "repair" | "maintenance"
   position: { x: number; y: number }
   tableNumber: number
@@ -202,21 +218,7 @@ const lc207Equipment: Equipment[] = [
     room: "LC207",
   })),
 
-  // Other equipment
-  {
-    id: "51",
-    name: "โปรเจคเตอร์",
-    code: "PJ-LC207-01",
-    type: "projector",
-    status: "working",
-    position: { x: 50, y: 18 },
-    tableNumber: 0,
-    side: "left",
-    row: 0,
-    seat: 0,
-    room: "LC207",
-  },
-
+  // Other non-table equipment removed (DB has no entries for certain non-table types)
 ]
 
 // Generate default layout for similar rooms by copying lc207 layout
@@ -249,7 +251,7 @@ const generateEquipmentForRoom = (roomCode: string): Equipment[] => {
       const y = Math.round(params.topY + (row - 1) * params.rowSpacing)
       position = { x: Math.max(2, Math.min(98, x)), y: Math.max(2, Math.min(98, y)) }
     } else {
-      // Non-table items (e.g., projector) keep a sensible default near top center
+    // Non-table items keep a sensible default near top center
       position = { x: 50, y: 18 }
     }
 
@@ -264,8 +266,10 @@ const generateEquipmentForRoom = (roomCode: string): Equipment[] => {
   })
 }
 
-export default function RoomMapPage({ params }: any) {
+export default function RoomMapPage() {
   const router = useRouter()
+  const params = useParams()
+  const taskId = (params as any)?.taskId
   const [selectedBuilding, setSelectedBuilding] = useState("lc")
   const [selectedFloor, setSelectedFloor] = useState("floor-2")
   const [selectedRoom, setSelectedRoom] = useState("lc207")
@@ -280,7 +284,13 @@ export default function RoomMapPage({ params }: any) {
     type: "success" | "error" | "info"
     message: string
   }>({ show: false, type: "info", message: "" })
-  const [roomEquipment, setRoomEquipment] = useState<Equipment[]>(lc207Equipment)
+  // start empty — DB is the source of truth; avoid showing LC207 generator while loading
+  const [roomEquipment, setRoomEquipment] = useState<Equipment[]>([])
+
+  // Clear any leftover notification when component mounts to avoid stale toasts
+  useEffect(() => {
+    setNotification({ show: false, type: "info", message: "" })
+  }, [])
 
   useEffect(() => {
     // Ensure current user is up-to-date
@@ -298,7 +308,7 @@ export default function RoomMapPage({ params }: any) {
         const res = await fetch('/api/repair-requests')
         if (res.ok) {
           const data = await res.json()
-          const found = data.find((r: any) => String(r.id) === String(params.taskId))
+          const found = data.find((r: any) => String(r.id) === String(taskId))
           if (found) {
             setTask(found)
             // set room/building/floor from task location so correct map is shown
@@ -321,23 +331,9 @@ export default function RoomMapPage({ params }: any) {
         // API may fail in dev - we'll fallback to local storage
       }
 
-      // Fallback: local storage
-      const requests = storage.getRequests()
-      const foundTask = requests.find((r) => String(r.id) === String(params.taskId))
-      if (foundTask) {
-        setTask(foundTask)
-        if (foundTask.location) {
-          const rawRoom = (foundTask.location.room || "").toString()
-          const match = rawRoom.match(/[A-Za-z]{1,3}\s*\d{2,3}|[A-Za-z]{1,3}\d{2,3}/i)
-          const roomCode = match ? match[0].replace(/\s+/g, "") : rawRoom
-          setSelectedRoom(roomCode.toLowerCase())
-          setSelectedBuilding((foundTask.location.building || "").toLowerCase())
-          setSelectedFloor(`floor-${String(foundTask.location.floor)}`)
-        }
-        const equipment = lc207Equipment.find((eq) => eq.code === foundTask.equipmentCode)
-        if (equipment) setTargetEquipment(equipment)
-        return
-      }
+  // If API didn't return task, we cannot proceed — show not found notification
+  // (we intentionally removed local-storage fallback per project decision)
+      
 
       // If still not found, show notification but do not force-navigation.
       showNotification('error', 'ไม่พบข้อมูลงานซ่อม')
@@ -345,33 +341,149 @@ export default function RoomMapPage({ params }: any) {
     }
 
     loadTask()
-  }, [params.taskId, router])
+  }, [taskId, router])
 
-  // load equipment for selected room
+  // compute whether current user is allowed to update the task status
+  const canUpdate = (() => {
+    if (!currentUser || !task) return false
+    // Admins can always update
+    if (auth.isAdmin()) return true
+    const userName = currentUser.name
+    // If assigned to this user, allow update
+    if (task.assignedTo === userName || task.assignedToName === userName) return true
+    // If not assigned yet, allow the reporting technician to start (if current user is technician)
+    if (!task.assignedTo && auth.isTechnician() && task.reporter === userName) return true
+    return false
+  })()
+
+  // load equipment for selected room (DB-only). Normalize response and mark repair items from repair-requests table.
   useEffect(() => {
-  // Normalize selectedRoom (e.g. 'lc205' or 'LC 205' -> 'LC205')
-  const cleaned = (selectedRoom || '').toString().replace(/[^a-zA-Z0-9]/g, '')
-  const apiRoom = cleaned.toUpperCase()
+    const cleaned = (selectedRoom || '').toString().replace(/[^a-zA-Z0-9]/g, '')
+    const apiRoom = cleaned.toUpperCase()
+
     const loadEquipment = async () => {
       try {
-        console.debug('[RoomMap] loadEquipment', { selectedRoom, apiRoom, taskId: params.taskId })
-        const res = await fetch(`/api/equipment/room/${apiRoom}`)
-        if (res.ok) {
-          const data = await res.json()
-          console.debug('[RoomMap] equipment response length', data?.length)
-          setRoomEquipment(data)
-          // set targetEquipment if matches task
+  console.debug('[RoomMap] loadEquipment START', { selectedRoom, apiRoom, taskId })
+
+        const eqRes = await fetch(`/api/equipment/room/${encodeURIComponent(apiRoom)}`)
+        const repRes = await fetch(`/api/repair-requests?room=${encodeURIComponent(apiRoom)}`)
+        let repairReports: any[] = []
+        if (repRes.ok) repairReports = await repRes.json()
+
+  if (eqRes.ok) {
+          const data = await eqRes.json()
+          const items = Array.isArray(data) ? data : []
+
+          // normalize rows to local Equipment shape
+          const normalized: Equipment[] = items.map((d: any, idx: number) => {
+            const id = d.id ?? d.equipment_id ?? d.equipmentId ?? d.eq_id ?? idx
+            const code = d.code ?? d.equipment_code ?? d.equipmentCode ?? ''
+            const name = d.name ?? d.equipment_name ?? d.equipmentName ?? code
+            const type = (d.type ?? d.equipment_type ?? 'computer') as any
+            const status = (d.status ?? d.equipment_status ?? 'working') as any
+
+            const posX = Number(d.position_x ?? d.positionX ?? d.position?.x ?? d.x ?? 50)
+            const posY = Number(d.position_y ?? d.positionY ?? d.position?.y ?? d.y ?? 50)
+            const tableNumber = Number(d.table_number ?? d.tableNumber ?? d.table ?? 0) || 0
+            const side = d.side ?? (tableNumber ? 'left' : 'left')
+            const row = Number(d.row_number ?? d.row ?? 0) || 0
+            const seat = Number(d.seat ?? 0) || 0
+            const roomField = (d.room ?? d.room_code ?? d.roomCode ?? apiRoom) as string
+
+            const report = repairReports.find((r: any) => (r.equipment_code ?? r.equipmentCode) === code)
+
+            return {
+              id: String(id ?? ''),
+              name: String(name ?? ''),
+              code: String(code ?? ''),
+              type,
+              status: report ? (report.status === 'completed' ? 'working' : 'repair') : status,
+              position: { x: Math.max(2, Math.min(98, Math.round(posX))), y: Math.max(2, Math.min(98, Math.round(posY))) },
+              tableNumber,
+              side: (side === 'right' ? 'right' : 'left') as any,
+              row,
+              seat,
+              room: String(roomField ?? apiRoom),
+              needsRepair: !!report && report.status !== 'completed',
+              repairDescription: report ? (report.description ?? report.note ?? undefined) : (d.repairDescription ?? d.repair_description ?? undefined),
+            }
+          })
+
+          setRoomEquipment(normalized)
+
           if (task?.equipmentCode) {
-            const found = data.find((d: any) => d.code === task.equipmentCode)
+            const found = normalized.find((d) => d.code === task.equipmentCode)
             if (found) setTargetEquipment(found)
+          }
+
+          if (normalized.length === 0) {
+            console.debug('[RoomMap] no DB rows for room', apiRoom)
           }
           return
         }
+        // If primary API returned non-ok (404), try legacy PHP endpoint that returns all equipment and filter by room
+        try {
+          const legacy = await fetch('/api/endpoints/equipment.php')
+          if (legacy.ok) {
+            const all = await legacy.json()
+            const filtered = Array.isArray(all)
+              ? all.filter((r: any) => {
+                  const roomVal = (r.room ?? r.room_code ?? r.roomCode ?? '').toString().replace(/[^a-zA-Z0-9]/g, '').toUpperCase()
+                  return roomVal === apiRoom
+                })
+              : []
+
+            if (filtered.length > 0) {
+              const normalizedLegacy: Equipment[] = filtered.map((d: any, idx: number) => {
+                const id = d.id ?? d.equipment_id ?? d.equipmentId ?? d.eq_id ?? idx
+                const code = d.code ?? d.equipment_code ?? d.equipmentCode ?? ''
+                const name = d.name ?? d.equipment_name ?? d.equipmentName ?? code
+                const type = (d.type ?? d.equipment_type ?? 'computer') as any
+                const status = (d.status ?? d.equipment_status ?? 'working') as any
+                const posX = Number(d.position_x ?? d.positionX ?? d.position?.x ?? d.x ?? 50)
+                const posY = Number(d.position_y ?? d.positionY ?? d.position?.y ?? d.y ?? 50)
+                const tableNumber = Number(d.table_number ?? d.tableNumber ?? d.table ?? 0) || 0
+                const side = d.side ?? (tableNumber ? 'left' : 'left')
+                const row = Number(d.row_number ?? d.row ?? 0) || 0
+                const seat = Number(d.seat ?? 0) || 0
+                const roomField = (d.room ?? d.room_code ?? d.roomCode ?? apiRoom) as string
+                const report = repairReports.find((r: any) => (r.equipment_code ?? r.equipmentCode) === code)
+                return {
+                  id: String(id ?? ''),
+                  name: String(name ?? ''),
+                  code: String(code ?? ''),
+                  type,
+                  status: report ? (report.status === 'completed' ? 'working' : 'repair') : status,
+                  position: { x: Math.max(2, Math.min(98, Math.round(posX))), y: Math.max(2, Math.min(98, Math.round(posY))) },
+                  tableNumber,
+                  side: (side === 'right' ? 'right' : 'left') as any,
+                  row,
+                  seat,
+                  room: String(roomField ?? apiRoom),
+                  needsRepair: !!report && report.status !== 'completed',
+                  repairDescription: report ? (report.description ?? report.note ?? undefined) : (d.repairDescription ?? d.repair_description ?? undefined),
+                }
+              })
+
+              setRoomEquipment(normalizedLegacy)
+              if (task?.equipmentCode) {
+                const found = normalizedLegacy.find((d) => d.code === task.equipmentCode)
+                if (found) setTargetEquipment(found)
+              }
+              return
+            }
+          }
+        } catch (e) {
+          // ignore legacy endpoint errors
+        }
       } catch (e) {
-        // ignore
+        console.debug('[RoomMap] loadEquipment error', e)
       }
-  // fallback: generate layout for the requested room so LC205/LC204 show map
-  setRoomEquipment(generateEquipmentForRoom(apiRoom || 'LC207'))
+
+  // on error or non-ok response: provide a safe generated layout (all 'working') but do not show toast
+  const safeGenerated = generateEquipmentForRoom(apiRoom || 'LC207').map((eq) => ({ ...eq, status: 'working' as const, needsRepair: false }))
+  setRoomEquipment(safeGenerated)
+  console.debug('[RoomMap] using safe generated layout for room', apiRoom)
     }
 
     loadEquipment()
@@ -395,12 +507,8 @@ export default function RoomMapPage({ params }: any) {
         return <Monitor className="w-3 h-3 sm:w-4 sm:h-4" />
       case "ac":
         return <Snowflake className="w-3 h-3 sm:w-4 sm:h-4" />
-      case "projector":
-        return <Zap className="w-3 h-3 sm:w-4 sm:h-4" />
       case "router":
         return <Wifi className="w-3 h-3 sm:w-4 sm:h-4" />
-      case "electrical":
-        return <Zap className="w-3 h-3 sm:w-4 sm:h-4" />
       default:
         return <Wrench className="w-3 h-3 sm:w-4 sm:h-4" />
     }
@@ -426,13 +534,27 @@ export default function RoomMapPage({ params }: any) {
     if (task && equipmentId === targetEquipment?.id) {
       // Update task status
       const taskStatus = newStatus === "working" ? "completed" : "in-progress"
-      storage.updateRequest(task.id, {
-        status: taskStatus,
-        assignedTo: currentUser?.name,
-        completedDate: newStatus === "working" ? new Date().toISOString().split("T")[0] : undefined,
-      })
-
-      showNotification("success", `อัปเดตสถานะ${newStatus === "working" ? "เสร็จสิ้น" : "กำลังซ่อม"}สำเร็จ`)
+      ;(async () => {
+        try {
+          const res = await fetch(`/api/repair-requests/${encodeURIComponent(String(task.id))}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              status: taskStatus,
+              assignedTo: currentUser?.name,
+              completedDate: newStatus === 'working' ? new Date().toISOString().split('T')[0] : undefined,
+              changedBy: currentUser?.name,
+            }),
+          })
+          if (res.ok) {
+            showNotification('success', `อัปเดตสถานะ${newStatus === 'working' ? 'เสร็จสิ้น' : 'กำลังซ่อม'}สำเร็จ`)
+          } else {
+            showNotification('error', 'ไม่สามารถอัปเดตสถานะได้')
+          }
+        } catch (e) {
+          showNotification('error', 'เกิดข้อผิดพลาดขณะติดต่อเซิร์ฟเวอร์')
+        }
+      })()
     }
     setShowEquipmentDialog(false)
   }
@@ -445,169 +567,47 @@ export default function RoomMapPage({ params }: any) {
     return `${table} (ฝั่ง${side} แถว ${row})`
   }
 
-  // Enhanced Mobile Controls Component
-  const MobileControls = () => (
-    <div className="space-y-6">
-      {/* User Info Section */}
-      <div className="p-4 bg-gradient-to-r from-orange-50 to-amber-50 rounded-lg border border-orange-200">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-amber-500 rounded-full flex items-center justify-center">
-            <User className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <p className="font-semibold text-gray-900">{currentUser?.name}</p>
-            <p className="text-sm text-gray-600">ช่างซ่อมบำรุง</p>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => router.push("/technician/dashboard")}
-            className="flex-1 bg-white/80 border-orange-200 text-orange-700 hover:bg-orange-50"
-          >
-            <Home className="w-4 h-4 mr-2" />
-            Dashboard
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleLogout}
-            className="bg-white/80 border-orange-200 text-orange-700 hover:bg-orange-50"
-          >
-            <LogOut className="w-4 h-4" />
-          </Button>
-        </div>
-      </div>
-
-      {/* Location Controls */}
-      <div className="space-y-4">
-        <div className="flex items-center gap-2 mb-4">
-          <Building className="w-5 h-5 text-orange-600" />
-          <h3 className="font-semibold text-gray-900">เลือกตำแหน่ง</h3>
-        </div>
-
-        <div>
-          <label className="text-sm font-medium mb-2 block text-gray-700">อาคาร</label>
-          <Select value={selectedBuilding} onValueChange={setSelectedBuilding}>
-            <SelectTrigger className="bg-white border-gray-200">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="lc">ตึก LC</SelectItem>
-              <SelectItem value="ud">ตึก UD</SelectItem>
-              <SelectItem value="building-a">อาคาร A</SelectItem>
-              <SelectItem value="building-b">อาคาร B</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div>
-          <label className="text-sm font-medium mb-2 block text-gray-700">ชั้น</label>
-          <Select value={selectedFloor} onValueChange={setSelectedFloor}>
-            <SelectTrigger className="bg-white border-gray-200">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="floor-1">ชั้น 1</SelectItem>
-              <SelectItem value="floor-2">ชั้น 2</SelectItem>
-              <SelectItem value="floor-3">ชั้น 3</SelectItem>
-              <SelectItem value="floor-4">ชั้น 4</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div>
-          <label className="text-sm font-medium mb-2 block text-gray-700">ห้อง</label>
-          <Select value={selectedRoom} onValueChange={setSelectedRoom}>
-            <SelectTrigger className="bg-white border-gray-200">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="lc204">ห้อง LC204</SelectItem>
-              <SelectItem value="lc205">ห้อง LC205</SelectItem>
-              <SelectItem value="lc207">ห้อง LC207</SelectItem>
-              <SelectItem value="lc208">ห้อง LC208</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      {/* Task Info Section */}
-      {task && (
-        <div className="p-4 bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg border border-blue-200">
-          <div className="flex items-center gap-2 mb-3">
-            <Wrench className="w-5 h-5 text-blue-600" />
-            <h3 className="font-semibold text-blue-900">งานซ่อมปัจจุบัน</h3>
-          </div>
-          <div className="space-y-2 text-sm">
-            <div>
-              <span className="text-blue-700 font-medium">รหัส:</span>
-              <span className="ml-2 text-blue-900">#{task.id}</span>
+  // Simplified Mobile Controls (keeps essential actions and avoids complex nested JSX)
+  const MobileControls = () => {
+    return (
+      <div className="space-y-6">
+        <div className="p-4 bg-gradient-to-r from-orange-50 to-amber-50 rounded-lg border border-orange-200">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-amber-500 rounded-full flex items-center justify-center">
+              <User className="w-5 h-5 text-white" />
             </div>
             <div>
-              <span className="text-blue-700 font-medium">ครุภัณฑ์:</span>
-              <span className="ml-2 text-blue-900">{task.equipmentName}</span>
+              <p className="font-semibold text-gray-900">{currentUser?.name}</p>
+              <p className="text-sm text-gray-600">ช่างซ่อมบำรุง</p>
             </div>
-            {targetEquipment && (
-              <div>
-                <span className="text-blue-700 font-medium">ตำแหน่ง:</span>
-                <span className="ml-2 text-blue-900 font-semibold">🎯 โต๊ะที่ {targetEquipment.tableNumber}</span>
-              </div>
-            )}
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => router.push("/technician/dashboard")} className="flex-1 bg-white/80 border-orange-200 text-orange-700 hover:bg-orange-50">
+              <Home className="w-4 h-4 mr-2" />
+              Dashboard
+            </Button>
+            <Button size="sm" variant="outline" onClick={handleLogout} className="bg-white/80 border-orange-200 text-orange-700 hover:bg-orange-50">
+              <LogOut className="w-4 h-4" />
+            </Button>
           </div>
         </div>
-      )}
 
-      {/* Legend Section */}
-      <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <Settings className="w-5 h-5 text-gray-600" />
-          <h3 className="font-semibold text-gray-900">สัญลักษณ์</h3>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="flex items-center gap-2 p-2 bg-red-50 rounded-lg border border-red-200">
-            <div className="w-4 h-4 bg-red-500 rounded-full ring-2 ring-red-200 animate-pulse"></div>
-            <span className="text-sm font-medium text-red-700">ต้องซ่อม</span>
-          </div>
-          <div className="flex items-center gap-2 p-2 bg-green-50 rounded-lg border border-green-200">
-            <div className="w-4 h-4 bg-green-500 rounded-full"></div>
-            <span className="text-sm font-medium text-green-700">ใช้งานได้</span>
-          </div>
-          <div className="flex items-center gap-2 p-2 bg-yellow-50 rounded-lg border border-yellow-200">
-            <div className="w-4 h-4 bg-yellow-500 rounded-full"></div>
-            <span className="text-sm font-medium text-yellow-700">บำรุงรักษา</span>
-          </div>
-          <div className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg border border-gray-200">
-            <div className="w-4 h-4 bg-gray-500 rounded-full"></div>
-            <span className="text-sm font-medium text-gray-700">ไม่ทราบสถานะ</span>
-          </div>
+        {/* Compact Quick Action */}
+        <div className="space-y-3">
+          <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+            <Target className="w-5 h-5 text-orange-600" />
+            การดำเนินการด่วน
+          </h3>
+          {targetEquipment && task?.status !== 'completed' && canUpdate && (
+            <Button className="w-full bg-gradient-to-r from-red-500 to-red-600 text-white" onClick={() => { setSelectedEquipment(targetEquipment); setShowEquipmentDialog(true); setShowMobileControls(false); }}>
+              <CheckCircle className="w-4 h-4 mr-2" />
+              เริ่มงานซ่อม {targetEquipment.name}
+            </Button>
+          )}
         </div>
       </div>
-
-      {/* Quick Actions */}
-      <div className="space-y-3">
-        <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-          <Target className="w-5 h-5 text-orange-600" />
-          การดำเนินการด่วน
-        </h3>
-  {targetEquipment && task?.status !== 'completed' && (
-          <Button
-            className="w-full bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white"
-            onClick={() => {
-              setSelectedEquipment(targetEquipment)
-              setShowEquipmentDialog(true)
-              setShowMobileControls(false)
-            }}
-          >
-            <CheckCircle className="w-4 h-4 mr-2" />
-            เริ่มงานซ่อม {targetEquipment.name}
-          </Button>
-        )}
-      </div>
-    </div>
-  )
+    )
+  }
 
   if (!task) {
     return (
@@ -702,7 +702,7 @@ export default function RoomMapPage({ params }: any) {
                 <div>
                   <label className="text-sm font-medium text-gray-600">สถานที่</label>
                   <p className="text-sm">
-                    {task.location.building} {task.location.floor} {task.location.room}
+                    {task.location?.building} {task.location?.floor} {task.location?.room}
                   </p>
                 </div>
                 {targetEquipment && (
@@ -711,6 +711,7 @@ export default function RoomMapPage({ params }: any) {
                     <p className="text-sm font-semibold text-red-600">🎯 {getTablePosition(targetEquipment)}</p>
                   </div>
                 )}
+
                 <div>
                   <label className="text-sm font-medium text-gray-600">ปัญหา</label>
                   <p className="text-sm text-gray-700 line-clamp-2">{task.description}</p>
@@ -815,7 +816,7 @@ export default function RoomMapPage({ params }: any) {
                       </CardTitle>
                     <CardDescription className="mt-1">ห้องคอมพิวเตอร์ - คลิกที่จุดครุภัณฑ์เพื่อดูรายละเอียด</CardDescription>
                   </div>
-                  {targetEquipment && (
+                  {targetEquipment && canUpdate && (
                     <div className="text-right">
                       <p className="text-sm font-medium text-red-600 flex items-center gap-1">
                         <Target className="w-4 h-4" />
@@ -844,15 +845,7 @@ export default function RoomMapPage({ params }: any) {
                         <p className="text-xs sm:text-sm text-gray-500">ห้องคอมพิวเตอร์ ({roomEquipment.length} เครื่อง)</p>
                     </div>
 
-                    {/* Teacher's Desk */}
-                    <div className="absolute top-4 sm:top-8 right-4 sm:right-8 w-16 sm:w-20 h-8 sm:h-10 bg-amber-200 rounded border border-amber-400 shadow-sm">
-                      <div className="text-xs text-center text-amber-800 mt-1 sm:mt-2 hidden sm:block">โต๊ะอาจารย์</div>
-                    </div>
-
-                    {/* Whiteboard */}
-                    <div className="absolute top-3 sm:top-4 left-1/2 transform -translate-x-1/2 w-24 sm:w-40 h-4 sm:h-6 bg-gray-200 rounded border border-gray-400 shadow-sm">
-                      <div className="text-xs text-center text-gray-600 mt-1 hidden sm:block">กระดานไวท์บอร์ด</div>
-                    </div>
+                    {/* Teacher's Desk and Whiteboard removed per request */}
 
                     {/* Side Labels - Hidden on mobile */}
                     <div className="hidden sm:block absolute top-24 left-6 text-sm font-medium text-blue-600 transform -rotate-90 origin-center">
@@ -892,7 +885,7 @@ export default function RoomMapPage({ params }: any) {
                         ) : (
                           getEquipmentIcon(equipment.type)
                         )}
-                        {equipment.code === task?.equipmentCode && (
+                        {equipment.code === task?.equipmentCode && canUpdate && (
                           <div className="absolute -top-6 sm:-top-10 left-1/2 transform -translate-x-1/2 bg-red-600 text-white px-1 sm:px-2 py-1 rounded-full text-xs whitespace-nowrap shadow-lg animate-bounce">
                             🎯 ต้องซ่อม
                           </div>
@@ -943,7 +936,7 @@ export default function RoomMapPage({ params }: any) {
                 {/* Equipment Summary */}
                 <div className="mt-4 sm:mt-6 grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                   {/* Target Equipment Info */}
-                  {targetEquipment && (
+                  {targetEquipment && canUpdate && (
                     <div className="p-4 bg-gradient-to-br from-red-50 to-red-100 rounded-lg border border-red-200 shadow-sm">
                       <h4 className="text-sm font-semibold text-red-800 mb-3 flex items-center gap-2">
                         <AlertTriangle className="w-4 h-4" />
@@ -963,19 +956,21 @@ export default function RoomMapPage({ params }: any) {
                           <span className="text-sm font-medium">{getTablePosition(targetEquipment)}</span>
                         </div>
                       </div>
-                      <div className="mt-3 pt-3 border-t border-red-200">
-                        <Button
-                          size="sm"
-                          className="w-full bg-red-600 hover:bg-red-700 shadow-md"
-                          onClick={() => {
-                            setSelectedEquipment(targetEquipment)
-                            setShowEquipmentDialog(true)
-                          }}
-                        >
-                          <CheckCircle className="w-4 h-4 mr-2" />
-                          เริ่มงานซ่อม
-                        </Button>
-                      </div>
+                      {canUpdate && (
+                        <div className="mt-3 pt-3 border-t border-red-200">
+                          <Button
+                            size="sm"
+                            className="w-full bg-red-600 hover:bg-red-700 shadow-md"
+                            onClick={() => {
+                              setSelectedEquipment(targetEquipment)
+                              setShowEquipmentDialog(true)
+                            }}
+                          >
+                            <CheckCircle className="w-4 h-4 mr-2" />
+                            เริ่มงานซ่อม
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -1030,9 +1025,10 @@ export default function RoomMapPage({ params }: any) {
         equipment={selectedEquipment}
         isOpen={showEquipmentDialog}
         onClose={() => setShowEquipmentDialog(false)}
-        onStatusUpdate={updateEquipmentStatus}
+  onStatusUpdate={updateEquipmentStatus}
         isTargetEquipment={selectedEquipment?.code === task?.equipmentCode}
   taskStatus={task?.status}
+  canUpdate={canUpdate}
       />
 
       <Notification

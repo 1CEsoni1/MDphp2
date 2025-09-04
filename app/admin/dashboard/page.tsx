@@ -41,7 +41,22 @@ import {
   TrendingUp,
 } from "lucide-react"
 // import { auth } from "@/lib/auth"
-import { storage, type RepairRequest } from "@/lib/storage"
+// TODO: migrate to API-backed endpoints. For now read/write requests from localStorage
+// Local minimal type for repair requests (matches previous mock shape)
+type RepairRequest = {
+  id: string
+  equipmentName: string
+  equipmentCode: string
+  location: { building?: string; floor?: string; room?: string }
+  description?: string
+  priority?: "low" | "medium" | "high"
+  reporter?: string
+  assignedTo?: string
+  status?: string
+  reportDate?: string
+  completedDate?: string
+  [k: string]: any
+}
 import { Notification } from "@/components/notification"
 
 export default function AdminDashboard() {
@@ -72,8 +87,13 @@ export default function AdminDashboard() {
       router.push("/");
       return;
     }
-    // Load requests
-    setRequests(storage.getRequests());
+    // Load requests (temporary localStorage fallback)
+    try {
+      const s = typeof window !== "undefined" ? localStorage.getItem("requests") : null
+      setRequests(s ? JSON.parse(s) : [])
+    } catch {
+      setRequests([])
+    }
   }, [router]);
 
   const showNotification = (type: "success" | "error" | "info", message: string) => {
@@ -88,7 +108,7 @@ export default function AdminDashboard() {
     }, 1500);
   }
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string | undefined) => {
     switch (status) {
       case "pending":
         return (
@@ -119,7 +139,7 @@ export default function AdminDashboard() {
     }
   }
 
-  const getPriorityBadge = (priority: string) => {
+  const getPriorityBadge = (priority: string | undefined) => {
     switch (priority) {
       case "high":
         return (
@@ -149,11 +169,12 @@ export default function AdminDashboard() {
   }
 
   const filteredRequests = requests.filter((request) => {
+    const q = searchTerm.toLowerCase()
     const matchesSearch =
-      request.equipmentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      request.equipmentCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      request.reporter.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = statusFilter === "all" || request.status === statusFilter
+      (request.equipmentName || "").toLowerCase().includes(q) ||
+      (request.equipmentCode || "").toLowerCase().includes(q) ||
+      (request.reporter || "").toLowerCase().includes(q)
+    const matchesStatus = statusFilter === "all" || (request.status || "") === statusFilter
     return matchesSearch && matchesStatus
   })
 
@@ -166,8 +187,10 @@ export default function AdminDashboard() {
 
   const handleDeleteRequest = (id: string) => {
     if (confirm("คุณต้องการลบรายการนี้หรือไม่?")) {
-      storage.deleteRequest(id)
-      setRequests(storage.getRequests())
+      // localStorage fallback: remove and persist
+      const cur = requests.filter((r) => r.id !== id)
+      setRequests(cur)
+      try { localStorage.setItem("requests", JSON.stringify(cur)) } catch {}
       showNotification("success", "ลบรายการสำเร็จ")
     }
   }
@@ -177,8 +200,10 @@ export default function AdminDashboard() {
     if (assignedTo) updates.assignedTo = assignedTo
     if (status === "completed") updates.completedDate = new Date().toISOString().split("T")[0]
 
-    storage.updateRequest(id, updates)
-    setRequests(storage.getRequests())
+  // Update in local state + persist
+  const updated = requests.map((r) => (r.id === id ? { ...r, ...updates } : r))
+  setRequests(updated)
+  try { localStorage.setItem("requests", JSON.stringify(updated)) } catch {}
     showNotification("success", "อัปเดตสถานะสำเร็จ")
   }
 
@@ -370,7 +395,7 @@ export default function AdminDashboard() {
         </div>
         <div className="space-y-2">
           {requests
-            .sort((a, b) => new Date(b.reportDate).getTime() - new Date(a.reportDate).getTime())
+            .sort((a, b) => new Date(b.reportDate ?? "1970-01-01").getTime() - new Date(a.reportDate ?? "1970-01-01").getTime())
             .slice(0, 3)
             .map((request) => (
               <div key={request.id} className="p-3 bg-blue-50 rounded-lg border border-blue-200">
@@ -533,7 +558,13 @@ export default function AdminDashboard() {
                 <AddRepairForm
                   onClose={() => setShowAddForm(false)}
                   onSuccess={() => {
-                    setRequests(storage.getRequests())
+                    // refresh from persisted storage
+                    try {
+                      const s = localStorage.getItem("requests")
+                      setRequests(s ? JSON.parse(s) : requests)
+                    } catch {
+                      /* ignore */
+                    }
                     showNotification("success", "เพิ่มรายการสำเร็จ")
                   }}
                 />
@@ -683,7 +714,7 @@ function AddRepairForm({ onClose, onSuccess }: { onClose: () => void; onSuccess:
     }
 
     const newRequest: RepairRequest = {
-      id: storage.generateId(),
+      id: Math.random().toString(36).slice(2, 9),
       equipmentName: formData.equipmentName,
       equipmentCode: formData.equipmentCode,
       location: {
@@ -699,7 +730,13 @@ function AddRepairForm({ onClose, onSuccess }: { onClose: () => void; onSuccess:
       reportDate: new Date().toISOString().split("T")[0],
     }
 
-    storage.addRequest(newRequest)
+    // persist to localStorage fallback
+    try {
+      const cur = localStorage.getItem("requests")
+      const arr = cur ? JSON.parse(cur) : []
+      arr.unshift(newRequest)
+      localStorage.setItem("requests", JSON.stringify(arr))
+    } catch {}
     onSuccess()
     onClose()
   }
