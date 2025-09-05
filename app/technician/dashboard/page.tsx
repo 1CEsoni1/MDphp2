@@ -179,7 +179,7 @@ export default function TechnicianDashboard() {
     }
   }
 
-  const updateTaskStatus = async (taskId: string, newStatus: RepairRequest["status"], notes?: string) => {
+  const updateTaskStatus = async (taskId: string, newStatus: RepairRequest["status"], notes?: string, files?: { name: string; data: string }[]) => {
     // Check authentication via helper
     const user = auth.getCurrentUser()
     if (!user) {
@@ -197,16 +197,33 @@ export default function TechnicianDashboard() {
     }
 
     try {
+      const payload: any = { status: newStatus, notes, assignedTo: (user as any).user_id || (user as any).userId || user.id || null, changedBy: (user as any).user_id || (user as any).userId || user.id || null };
+      if (Array.isArray(files) && files.length > 0) payload.files = files;
+
       const res = await fetch(`/api/repair-requests/${taskId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ status: newStatus, notes, assignedTo: (user as any).user_id || (user as any).userId || user.id || null, changedBy: (user as any).user_id || (user as any).userId || user.id || null })
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (res.ok && data.success) {
         showNotification('success', 'อัปเดตสถานะสำเร็จ');
+        // refresh selectedTask immediately so UI (images area) updates
+        try {
+          const resp = await fetch(`/api/repair-requests`);
+          if (resp.ok) {
+            const allRequests = await resp.json();
+            setTasks(allRequests);
+            const updated = allRequests.find((r: any) => String(r.id) === String(taskId)) || null;
+            setSelectedTask(updated);
+          }
+        } catch (e) {
+          // ignore
+        }
       } else {
-        showNotification('error', data.message || 'ไม่สามารถอัปเดตสถานะได้');
+  console.error('updateTaskStatus error response:', data)
+  const errMsg = data.error || data.message || 'ไม่สามารถอัปเดตสถานะได้'
+  showNotification('error', errMsg)
       }
     } catch (e) {
       showNotification('error', 'เกิดข้อผิดพลาดในการอัปเดตสถานะ');
@@ -217,8 +234,8 @@ export default function TechnicianDashboard() {
       const resp = await fetch('/api/repair-requests');
       if (resp.ok) {
         const allRequests = await resp.json();
-  const technicianTasks = allRequests.filter((request: any) => request.assignedTo === ((user as any).user_id || (user as any).userId || user.id) || request.status === 'pending');
-        setTasks(technicianTasks);
+        // Keep full list so UI remains consistent after status update
+        setTasks(allRequests);
       }
     } catch (e) {
       // fallback: keep existing tasks
@@ -271,7 +288,8 @@ export default function TechnicianDashboard() {
         // rollback optimistic change
         setTasks(prevTasks)
         if (selectedTask && selectedTask.id === taskId) setSelectedTask(prevTasks.find((p) => p.id === taskId) || null)
-        showNotification('error', data.message || 'ไม่สามารถรับงานได้')
+  console.error('assignToMe error response:', data)
+  showNotification('error', data.error || data.message || 'ไม่สามารถรับงานได้')
       }
     } catch (e) {
       // rollback
@@ -671,16 +689,28 @@ export default function TechnicianDashboard() {
                     </DialogContent>
                   </Dialog>
 
-                  {/* Show start button only if task is assigned to current user */}
+                  {/* Actions for assigned tasks */}
                   {task.assignedTo && currentUser && String(task.assignedTo) === String((currentUser as any).user_id || (currentUser as any).userId || (currentUser as any).id) && (
-                    <Button
-                      size="sm"
-                      className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white"
-                      onClick={() => updateTaskStatus(task.id, "in-progress")}
-                    >
-                      <Wrench className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
-                      <span className="text-xs sm:text-sm hidden sm:inline">เริ่มซ่อม</span>
-                    </Button>
+                    task.status === 'in-progress' ? (
+                      <Button
+                        size="sm"
+                        variant="blue"
+                        className="flex items-center gap-2"
+                        onClick={() => router.push(`/technician/room-map/${task.id}`)}
+                      >
+                        <MapPin className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+                        <span className="text-xs sm:text-sm">ดูแผนผังห้อง</span>
+                      </Button>
+                    ) : task.status === 'completed' ? null : (
+                      <Button
+                        size="sm"
+                        className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white"
+                        onClick={() => updateTaskStatus(task.id, "in-progress")}
+                      >
+                        <Wrench className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+                        <span className="text-xs sm:text-sm hidden sm:inline">เริ่มซ่อม</span>
+                      </Button>
+                    )
                   )}
                   {/* If task is pending (no assignedTo), allow claiming */}
                   {!task.assignedTo && (
@@ -722,7 +752,7 @@ function TaskDetailModal({
   onAssignToMe,
 }: {
   task: RepairRequest
-  onUpdateStatus: (taskId: string, status: RepairRequest["status"], notes?: string) => void
+  onUpdateStatus: (taskId: string, status: RepairRequest["status"], notes?: string, files?: { name: string; data: string }[]) => void
   currentUser: any
   onAssignToMe?: (taskId: string) => void
 }) {
@@ -736,7 +766,30 @@ function TaskDetailModal({
   }
 
   const handleStatusUpdate = (status: RepairRequest["status"]) => {
-    onUpdateStatus(task.id, status, notes)
+    // convert selectedFiles to base64 payloads if any
+    const proceed = async () => {
+      let payloadFiles: { name: string; data: string }[] | undefined = undefined;
+      if (selectedFiles && selectedFiles.length > 0) {
+        payloadFiles = [];
+        for (const f of selectedFiles) {
+          try {
+            const base64 = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(String(reader.result));
+              reader.onerror = () => reject(new Error('file-read-error'));
+              reader.readAsDataURL(f);
+            });
+            payloadFiles.push({ name: f.name, data: base64 });
+          } catch (e) {
+            // ignore this file
+          }
+        }
+      }
+      onUpdateStatus(task.id, status, notes, payloadFiles)
+      // clear after sending
+      setSelectedFiles([])
+    }
+    proceed()
     setNotes("")
   }
 
@@ -762,6 +815,7 @@ function TaskDetailModal({
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
+  {/* Existing Uploaded Images (moved into upload area for completed tasks) */}
         {/* Equipment Details */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
           <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
@@ -819,7 +873,84 @@ function TaskDetailModal({
           </div>
         </div>
 
-        {/* Status Update */}
+        {/* Image Upload */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">อัปโหลดภาพหลักฐาน</h3>
+            {task.status === 'completed' ? (
+              <div className="p-2">
+                <h4 className="text-sm font-medium mb-2">รูปภาพหลักฐาน</h4>
+                <div className="flex gap-3 flex-wrap">
+                  {(() => {
+                    let imgs: string[] = [];
+                    if (Array.isArray(task.images)) {
+                      imgs = task.images.map((s: any) => {
+                        if (!s) return '';
+                        if (typeof s === 'string') {
+                          if (s.startsWith('/') || s.startsWith('http') || s.startsWith('data:')) return s;
+                          return `/uploads/${String(s).replace(/^\/+/, '')}`;
+                        }
+                        if (s.data && s.mime) return `data:${s.mime};base64,${s.data}`;
+                        if (s.filename) return `/uploads/${String(s.filename).replace(/^\/+/, '')}`;
+                        return '';
+                      }).filter(Boolean);
+                    } else if (typeof task.images === 'string') {
+                      try {
+                        const parsed = JSON.parse(task.images || '[]');
+                        if (Array.isArray(parsed)) {
+                          imgs = parsed.map((s: string) => (s && (s.startsWith('/') || s.startsWith('http')) ? s : `/uploads/${String(s).replace(/^\/+/, '')}`)).filter(Boolean);
+                        }
+                      } catch (e) {
+                        imgs = task.images ? task.images.split(',').map((s: string) => `/uploads/${String(s).replace(/^\/+/, '')}`) : [];
+                      }
+                    }
+                    return imgs.map((url, i) => (
+                      <a key={i} href={url} target="_blank" rel="noreferrer" className="block w-28 h-28 overflow-hidden rounded-md border">
+                        <img src={url} alt={`img-${i}`} className="w-full h-full object-cover" />
+                      </a>
+                    ));
+                  })()}
+                </div>
+              </div>
+            ) : (
+              <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:border-blue-400 hover:bg-blue-50/50 transition-all duration-200">
+                <Upload className="w-8 h-8 text-gray-400 mx-auto mb-3" />
+                <p className="text-base text-gray-600 mb-3">คลิกเพื่อเลือกไฟล์หรือลากไฟล์มาวาง</p>
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                  id="file-upload"
+                />
+                <label htmlFor="file-upload">
+                  <Button
+                    variant="outline"
+                    asChild
+                    className="cursor-pointer shadow-sm hover:shadow-md transition-shadow bg-transparent"
+                  >
+                    <span>
+                      <Camera className="w-4 h-4 mr-2" />
+                      เลือกไฟล์
+                    </span>
+                  </Button>
+                </label>
+                {selectedFiles.length > 0 && (
+                  <div className="mt-3 text-sm text-green-600 font-medium">เลือกไฟล์แล้ว: {selectedFiles.length} ไฟล์</div>
+                )}
+              </div>
+            )}
+        </div>
+
+        {/* Previous Notes */}
+        {task.notes && (
+          <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl border border-gray-200 p-5">
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">หมายเหตุก่อนหน้า</h3>
+            <p className="text-base text-gray-700 leading-relaxed">{task.notes}</p>
+          </div>
+        )}
+
+        {/* Status Update (moved to bottom) */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">อัปเดตสถานะงาน</h3>
           {(() => {
@@ -829,16 +960,24 @@ function TaskDetailModal({
             if (!isOwner) return (<div className="mb-5 text-sm text-gray-600">คุณไม่มีสิทธิ์อัปเดตสถานะงานนี้</div>)
             return (
               <div className="flex flex-col sm:flex-row gap-3 mb-5">
-                <Button
-                  className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 flex-1 sm:flex-none"
-                  onClick={() => handleStatusUpdate("in-progress")}
-                >
-                  <Wrench className="w-4 h-4 mr-2" />
-                  เริ่มซ่อม
-                </Button>
+                {/* hide "เริ่มซ่อม" button if already in-progress */}
+                {task.status !== 'in-progress' && (
+                  <Button
+                    className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 flex-1 sm:flex-none"
+                    onClick={() => handleStatusUpdate("in-progress")}
+                  >
+                    <Wrench className="w-4 h-4 mr-2" />
+                    เริ่มซ่อม
+                  </Button>
+                )}
                 <Button
                   className="bg-green-600 hover:bg-green-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 flex-1 sm:flex-none"
-                  onClick={() => handleStatusUpdate("completed")}
+                  onClick={() => {
+                    // confirmation before marking completed
+                    if (typeof window !== 'undefined' && confirm('ยืนยันการส่งงานว่าเสร็จสมบูรณ์?')) {
+                      handleStatusUpdate("completed")
+                    }
+                  }}
                 >
                   <CheckCircle className="w-4 h-4 mr-2" />
                   ซ่อมเสร็จแล้ว
@@ -865,46 +1004,6 @@ function TaskDetailModal({
             </div>
           )}
         </div>
-
-        {/* Image Upload */}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">อัปโหลดภาพหลักฐาน</h3>
-          <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:border-blue-400 hover:bg-blue-50/50 transition-all duration-200">
-            <Upload className="w-8 h-8 text-gray-400 mx-auto mb-3" />
-            <p className="text-base text-gray-600 mb-3">คลิกเพื่อเลือกไฟล์หรือลากไฟล์มาวาง</p>
-            <input
-              type="file"
-              multiple
-              accept="image/*"
-              onChange={handleFileSelect}
-              className="hidden"
-              id="file-upload"
-            />
-            <label htmlFor="file-upload">
-              <Button
-                variant="outline"
-                asChild
-                className="cursor-pointer shadow-sm hover:shadow-md transition-shadow bg-transparent"
-              >
-                <span>
-                  <Camera className="w-4 h-4 mr-2" />
-                  เลือกไฟล์
-                </span>
-              </Button>
-            </label>
-            {selectedFiles.length > 0 && (
-              <div className="mt-3 text-sm text-green-600 font-medium">เลือกไฟล์แล้ว: {selectedFiles.length} ไฟล์</div>
-            )}
-          </div>
-        </div>
-
-        {/* Previous Notes */}
-        {task.notes && (
-          <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl border border-gray-200 p-5">
-            <h3 className="text-lg font-semibold text-gray-900 mb-3">หมายเหตุก่อนหน้า</h3>
-            <p className="text-base text-gray-700 leading-relaxed">{task.notes}</p>
-          </div>
-        )}
       </div>
     </div>
   )
