@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -70,37 +70,39 @@ export default function TechnicianDashboard() {
     message: string;
   }>({ show: false, type: "info", message: "" });
   const [isMounted, setIsMounted] = useState(false);
+  const isComposing = useRef(false);
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
+  // Reusable fetch function so mobile menu and other UI can refresh live data
+  const fetchTasks = async () => {
+    try {
+      const res = await fetch('/api/repair-requests');
+      if (!res.ok) throw new Error('Failed to fetch');
+      const allRequests = await res.json();
+      // Show all requests by default for the dashboard; statusFilter/search will narrow on UI
+      setTasks(allRequests);
+    } catch (e) {
+      // API failed — do NOT use localStorage fallback for technician area.
+      // Show an error notification and leave tasks empty so techs only work with real DB data.
+      setNotification({ show: true, type: 'error', message: 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์เพื่อดึงข้อมูลงานซ่อม' });
+      setTasks([]);
+    }
+  };
+
   useEffect(() => {
     if (!isMounted) return;
     // Check authentication using auth helper
-    const user = auth.getCurrentUser()
-    setCurrentUser(user)
+    const user = auth.getCurrentUser();
+    setCurrentUser(user);
     if (!auth.isAuthenticated() || !auth.isTechnician()) {
-      router.push("/")
-      return
+      router.push("/");
+      return;
     }
 
-    // Fetch tasks from API backed by MySQL (show ALL requests by default)
-    const fetchTasks = async () => {
-      try {
-        const res = await fetch('/api/repair-requests');
-        if (!res.ok) throw new Error('Failed to fetch');
-        const allRequests = await res.json();
-  // Show all requests by default for the dashboard; statusFilter/search will narrow on UI
-  setTasks(allRequests);
-      } catch (e) {
-    // API failed — do NOT use localStorage fallback for technician area.
-    // Show an error notification and leave tasks empty so techs only work with real DB data.
-    setNotification({ show: true, type: 'error', message: 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์เพื่อดึงข้อมูลงานซ่อม' })
-    setTasks([])
-      }
-    };
-
+    // initial load
     fetchTasks();
   }, [router, isMounted]);
 
@@ -336,7 +338,7 @@ export default function TechnicianDashboard() {
           <Button
             size="sm"
             variant="outline"
-            onClick={() => router.push("/")}
+            onClick={() => router.push("/technician/dashboard")}
             className="flex-1 bg-white/80 border-orange-200 text-orange-700 hover:bg-orange-50"
           >
             <Home className="w-4 h-4 mr-2" />
@@ -350,6 +352,34 @@ export default function TechnicianDashboard() {
           >
             <LogOut className="w-4 h-4" />
           </Button>
+        </div>
+
+        {/* Mobile quick actions: refresh and recent tasks */}
+        <div className="pt-2">
+          <div className="space-y-2">
+            <h5 className="text-xs text-gray-500">งานล่าสุด</h5>
+            <div className="flex flex-col gap-2">
+              {tasks.slice(0, 4).map((t) => (
+                <div key={t.id} className="flex items-center justify-between p-2 bg-white rounded-md border border-gray-100">
+                  <div>
+                    <div className="text-sm font-medium">{t.equipmentName ?? 'ไม่ระบุชื่อ'}</div>
+                    <div className="text-xs text-gray-500">{t.location?.building ?? ''} {t.location?.room ?? ''}</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" variant="outline" onClick={() => { setShowMobileFilters(false); router.push(`/technician/room-map/${t.id}`); }}>
+                      ดู
+                    </Button>
+                    {!t.assignedTo && (
+                      <Button size="sm" variant="blue" onClick={() => assignToMe(t.id)}>
+                        รับ
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {tasks.length === 0 && <div className="text-xs text-gray-500">ไม่มีงาน</div>}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -399,7 +429,9 @@ export default function TechnicianDashboard() {
             <Input
               placeholder="ค้นหาครุภัณฑ์ รหัส หรือสถานที่..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => { if (!isComposing.current) setSearchTerm((e.target as HTMLInputElement).value) }}
+              onCompositionStart={() => (isComposing.current = true)}
+              onCompositionEnd={(e) => { isComposing.current = false; setSearchTerm((e.target as HTMLInputElement).value) }}
               className="pl-10"
             />
           </div>
@@ -420,78 +452,6 @@ export default function TechnicianDashboard() {
           </Select>
         </div>
       </div>
-
-      {/* Quick Actions */}
-      <div className="space-y-3">
-        <div className="flex items-center gap-2">
-          <Settings className="w-5 h-5 text-gray-600" />
-          <h3 className="font-semibold text-gray-900">การดำเนินการด่วน</h3>
-        </div>
-        <div className="space-y-2">
-          <Button
-            size="sm"
-            variant="outline"
-            className="w-full justify-start bg-white/80 border-gray-200 text-gray-700 hover:bg-gray-50"
-            onClick={() => router.push("/map")}
-          >
-            <MapPin className="w-4 h-4 mr-2" />
-            ดูแผนผังครุภัณฑ์
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="w-full justify-start bg-white/80 border-gray-200 text-gray-700 hover:bg-gray-50"
-            onClick={() => showNotification("info", "ฟีเจอร์รายงานกำลังพัฒนา")}
-          >
-            <BarChart3 className="w-4 h-4 mr-2" />
-            ดูรายงานการซ่อม
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="w-full justify-start bg-white/80 border-gray-200 text-gray-700 hover:bg-gray-50"
-            onClick={() => showNotification("info", "ฟีเจอร์ปฏิทินกำลังพัฒนา")}
-          >
-            <Calendar className="w-4 h-4 mr-2" />
-            ปฏิทินงานซ่อม
-          </Button>
-        </div>
-      </div>
-
-      {/* Priority Tasks */}
-  {tasks.filter((t) => t.priority === "high" && t.status !== "completed").length > 0 && (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="w-5 h-5 text-red-600" />
-            <h3 className="font-semibold text-red-900">งานด่วน</h3>
-          </div>
-          <div className="space-y-2">
-            {tasks
-              .filter((t) => t.priority === "high" && t.status !== "completed")
-              .slice(0, 3)
-              .map((task) => (
-                <div key={task.id} className="p-3 bg-red-50 rounded-lg border border-red-200">
-                  <p className="text-sm font-medium text-red-800">{task.equipmentName}</p>
-                  <p className="text-xs text-red-600">
-                    {task.location?.building ?? ""} {task.location?.room ?? ""}
-                  </p>
-                  <div className="mt-2">
-                    <Button
-                      size="sm"
-                      className="w-full bg-red-600 hover:bg-red-700 text-white"
-                      onClick={() => {
-                        setSelectedTask(task)
-                        setShowMobileFilters(false)
-                      }}
-                    >
-                      ดูรายละเอียด
-                    </Button>
-                  </div>
-                </div>
-              ))}
-          </div>
-        </div>
-      )}
     </div>
   )
 
@@ -611,7 +571,9 @@ export default function TechnicianDashboard() {
             <Input
               placeholder="ค้นหาครุภัณฑ์ รหัส หรือสถานที่..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => { if (!isComposing.current) setSearchTerm((e.target as HTMLInputElement).value) }}
+              onCompositionStart={() => (isComposing.current = true)}
+              onCompositionEnd={(e) => { isComposing.current = false; setSearchTerm((e.target as HTMLInputElement).value) }}
               className="pl-10 bg-white/95 backdrop-blur-sm border-gray-200"
             />
           </div>

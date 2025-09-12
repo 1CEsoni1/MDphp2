@@ -591,20 +591,6 @@ export default function RoomMapPage() {
             </Button>
           </div>
         </div>
-
-        {/* Compact Quick Action */}
-        <div className="space-y-3">
-          <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-            <Target className="w-5 h-5 text-orange-600" />
-            การดำเนินการด่วน
-          </h3>
-          {targetEquipment && task?.status !== 'completed' && canUpdate && (
-            <Button className="w-full bg-gradient-to-r from-red-500 to-red-600 text-white" onClick={() => { setSelectedEquipment(targetEquipment); setShowEquipmentDialog(true); setShowMobileControls(false); }}>
-              <CheckCircle className="w-4 h-4 mr-2" />
-              เริ่มงานซ่อม {targetEquipment.name}
-            </Button>
-          )}
-        </div>
       </div>
     )
   }
