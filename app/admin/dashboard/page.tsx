@@ -74,8 +74,9 @@ export default function AdminDashboard() {
     message: string
   }>({ show: false, type: "info", message: "" })
 
+
   useEffect(() => {
-    // Check authentication from localStorage
+    // ตรวจสอบสิทธิ์ผู้ใช้จาก localStorage
     const userStr = typeof window !== "undefined" ? localStorage.getItem("user") : null;
     if (!userStr) {
       router.push("/");
@@ -87,13 +88,18 @@ export default function AdminDashboard() {
       router.push("/");
       return;
     }
-    // Load requests (temporary localStorage fallback)
-    try {
-      const s = typeof window !== "undefined" ? localStorage.getItem("requests") : null
-      setRequests(s ? JSON.parse(s) : [])
-    } catch {
-      setRequests([])
-    }
+    // ดึงข้อมูลจาก API
+    const fetchRequests = async () => {
+      try {
+        const res = await fetch("/api/repair-requests");
+        if (!res.ok) throw new Error("ไม่สามารถดึงข้อมูลงานซ่อมได้");
+        const allRequests = await res.json();
+        setRequests(allRequests);
+      } catch {
+        setRequests([]);
+      }
+    };
+    fetchRequests();
   }, [router]);
 
   const showNotification = (type: "success" | "error" | "info", message: string) => {
