@@ -70,30 +70,38 @@ export default function TechnicianDashboard() {
     message: string;
   }>({ show: false, type: "info", message: "" });
   const [isMounted, setIsMounted] = useState(false);
+  const [isClient, setIsClient] = useState(false);
   const isComposing = useRef(false);
 
   useEffect(() => {
     setIsMounted(true);
+    setIsClient(true);
   }, []);
 
   // Reusable fetch function so mobile menu and other UI can refresh live data
   const fetchTasks = async () => {
     try {
-      const res = await fetch('/api/repair-requests');
-      if (!res.ok) throw new Error('Failed to fetch');
-      const allRequests = await res.json();
-      // Show all requests by default for the dashboard; statusFilter/search will narrow on UI
-      setTasks(allRequests);
+      const user = auth.getCurrentUser();
+      const userId = (user as any)?.user_id || (user as any)?.userId || user?.id;
+      
+      // Fetch tasks assigned to rooms that this technician is responsible for
+      const res = await fetch(`/api/repair-requests/my-rooms?user_id=${encodeURIComponent(userId)}`);
+      if (!res.ok) {
+        throw new Error(`API returned ${res.status}: ${await res.text()}`);
+      }
+      const myRoomRequests = await res.json();
+      setTasks(myRoomRequests);
     } catch (e) {
-      // API failed — do NOT use localStorage fallback for technician area.
-      // Show an error notification and leave tasks empty so techs only work with real DB data.
+      console.error('Failed to fetch room-specific tasks:', e);
+      // Show error notification
       setNotification({ show: true, type: 'error', message: 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์เพื่อดึงข้อมูลงานซ่อม' });
       setTasks([]);
     }
   };
 
   useEffect(() => {
-    if (!isMounted) return;
+    if (!isMounted || !isClient) return;
+    
     // Check authentication using auth helper
     const user = auth.getCurrentUser();
     setCurrentUser(user);
@@ -104,18 +112,26 @@ export default function TechnicianDashboard() {
 
     // initial load
     fetchTasks();
-  }, [router, isMounted]);
+  }, [router, isMounted, isClient]);
 
-  if (!isMounted) return null;
+  // Show loading state until client-side hydration is complete
+  if (!isMounted || !isClient) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">กำลังโหลด...</p>
+        </div>
+      </div>
+    );
+  }
 
   const showNotification = (type: "success" | "error" | "info", message: string) => {
     setNotification({ show: true, type, message })
   }
 
   const handleLogout = () => {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("user");
-    }
+    auth.logout(); // ใช้ auth helper แทน
     showNotification("success", "ออกจากระบบสำเร็จ");
     setTimeout(() => {
       router.push("/");
@@ -276,16 +292,8 @@ export default function TechnicianDashboard() {
       const data = await res.json()
       if (res.ok && data.success) {
         showNotification('success', 'รับงานเรียบร้อยแล้ว')
-        // optionally refresh from server to reconcile
-        try {
-          const resp = await fetch('/api/repair-requests')
-          if (resp.ok) {
-            const allRequests = await resp.json()
-            setTasks(allRequests)
-          }
-        } catch (e) {
-          // ignore
-        }
+        // Refresh tasks from my-rooms API
+        fetchTasks()
   } else {
         // rollback optimistic change
         setTasks(prevTasks)
@@ -489,7 +497,8 @@ export default function TechnicianDashboard() {
                 </div>
                 <div>
                   <h1 className="text-base sm:text-lg font-semibold text-gray-900">ช่างซ่อม Dashboard</h1>
-                  <p className="text-xs sm:text-sm text-gray-500 hidden sm:block">ระบบจัดการงานซ่อมบำรุง</p>
+                  <p className="text-xs sm:text-sm text-gray-500 hidden sm:block">งานในห้องที่รับผิดชอบ</p>
+                  <p className="text-xs text-blue-600">{currentUser?.name || "ยินดีต้อนรับ"}</p>
                 </div>
               </div>
             </div>
@@ -691,7 +700,7 @@ export default function TechnicianDashboard() {
             </div>
             <h3 className="text-lg font-medium text-gray-900 mb-2">ไม่พบงานซ่อม</h3>
             <p className="text-gray-600 max-w-md mx-auto">
-              {searchTerm || statusFilter !== "all" ? "ไม่มีงานซ่อมที่ตรงกับเงื่อนไขการค้นหา" : "ยังไม่มีงานซ่อมที่มอบหมายให้คุณ"}
+              {searchTerm || statusFilter !== "all" ? "ไม่มีงานซ่อมที่ตรงกับเงื่อนไขการค้นหา" : "ไม่มีงานซ่อมในห้องที่คุณรับผิดชอบในขณะนี้"}
             </p>
           </div>
         )}

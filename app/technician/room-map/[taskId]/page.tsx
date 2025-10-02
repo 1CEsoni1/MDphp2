@@ -231,11 +231,11 @@ const generateEquipmentForRoom = (roomCode: string): Equipment[] => {
   // Use a grid-based generator derived from LC207 layout; compute positions by side/row/seat
   const roomGridParams: Record<string, { leftX: number; rightX: number; colSpacing: number; topY: number; rowSpacing: number }> = {
     LC207: { leftX: 15, rightX: 65, colSpacing: 5.5, topY: 30, rowSpacing: 10 },
-    LC205: { leftX: 16, rightX: 64, colSpacing: 5.8, topY: 28, rowSpacing: 10 },
-    LC204: { leftX: 15, rightX: 66, colSpacing: 5.5, topY: 29, rowSpacing: 10 },
+    LC205: { leftX: 15, rightX: 65, colSpacing: 5.5, topY: 30, rowSpacing: 10 },
+    LC204: { leftX: 15, rightX: 65, colSpacing: 5.5, topY: 30, rowSpacing: 10 },
   }
 
-  const params = roomGridParams[room] || roomGridParams['LC207']
+  const อparams = roomGridParams[room] || roomGridParams['LC207']
 
   return lc207Equipment.map((eq, idx) => {
     const newCode = eq.code.replace(/LC207/i, room)
@@ -284,8 +284,40 @@ export default function RoomMapPage() {
     type: "success" | "error" | "info"
     message: string
   }>({ show: false, type: "info", message: "" })
-  // start empty — DB is the source of truth; avoid showing LC207 generator while loading
-  const [roomEquipment, setRoomEquipment] = useState<Equipment[]>([])
+  // start with fallback equipment layout to ensure something always displays
+  const [roomEquipment, setRoomEquipment] = useState<Equipment[]>(() => {
+    // Generate basic layout for initial display
+    const fallbackEquipment: Equipment[] = []
+    let id = 1
+    
+    // Generate 50 computers in standard 5x5 grid layout for both sides
+    for (let side = 0; side < 2; side++) {
+      const sideLabel = side === 0 ? 'left' : 'right'
+      const baseX = side === 0 ? 15 : 65
+      
+      for (let row = 1; row <= 5; row++) {
+        for (let seat = 1; seat <= 5; seat++) {
+          fallbackEquipment.push({
+            id: String(id),
+            name: `คอมพิวเตอร์ ${String(id).padStart(2, "0")}`,
+            code: `PC-LOADING-${String(id).padStart(2, "0")}`,
+            type: "computer" as const,
+            status: "working" as const,
+            position: { x: baseX + (seat - 1) * 5.5, y: 30 + (row - 1) * 10 },
+            tableNumber: id,
+            side: sideLabel as any,
+            row,
+            seat,
+            room: "LOADING",
+            needsRepair: false
+          })
+          id++
+        }
+      }
+    }
+    
+    return fallbackEquipment
+  })
 
   // Clear any leftover notification when component mounts to avoid stale toasts
   useEffect(() => {
@@ -366,124 +398,108 @@ export default function RoomMapPage() {
   console.debug('[RoomMap] loadEquipment START', { selectedRoom, apiRoom, taskId })
 
         const eqRes = await fetch(`/api/equipment/room/${encodeURIComponent(apiRoom)}`)
-        const repRes = await fetch(`/api/repair-requests?room=${encodeURIComponent(apiRoom)}`)
-        let repairReports: any[] = []
-        if (repRes.ok) repairReports = await repRes.json()
-
-  if (eqRes.ok) {
+        
+        if (eqRes.ok) {
           const data = await eqRes.json()
-          const items = Array.isArray(data) ? data : []
+          console.debug('[RoomMap] Equipment API response:', data)
+          
+          const equipment = Array.isArray(data.equipment) ? data.equipment : (Array.isArray(data) ? data : [])
+          const repairs = Array.isArray(data.repairs) ? data.repairs : []
+          
+          console.debug('[RoomMap] Equipment count:', equipment.length, 'Repairs count:', repairs.length)
 
-          // normalize rows to local Equipment shape
-          const normalized: Equipment[] = items.map((d: any, idx: number) => {
-            const id = d.id ?? d.equipment_id ?? d.equipmentId ?? d.eq_id ?? idx
-            const code = d.code ?? d.equipment_code ?? d.equipmentCode ?? ''
-            const name = d.name ?? d.equipment_name ?? d.equipmentName ?? code
-            const type = (d.type ?? d.equipment_type ?? 'computer') as any
-            const status = (d.status ?? d.equipment_status ?? 'working') as any
+          if (equipment.length > 0) {
+            // normalize rows to local Equipment shape
+            const normalized: Equipment[] = equipment.map((d: any, idx: number) => {
+              const id = d.id ?? d.equipment_id ?? d.equipmentId ?? d.eq_id ?? idx
+              const code = d.code ?? d.equipment_code ?? d.equipmentCode ?? ''
+              const name = d.name ?? d.equipment_name ?? d.equipmentName ?? code
+              const type = (d.type ?? d.equipment_type ?? 'computer') as any
+              const status = (d.status ?? d.equipment_status ?? 'working') as any
 
-            const posX = Number(d.position_x ?? d.positionX ?? d.position?.x ?? d.x ?? 50)
-            const posY = Number(d.position_y ?? d.positionY ?? d.position?.y ?? d.y ?? 50)
-            const tableNumber = Number(d.table_number ?? d.tableNumber ?? d.table ?? 0) || 0
-            const side = d.side ?? (tableNumber ? 'left' : 'left')
-            const row = Number(d.row_number ?? d.row ?? 0) || 0
-            const seat = Number(d.seat ?? 0) || 0
-            const roomField = (d.room ?? d.room_code ?? d.roomCode ?? apiRoom) as string
-
-            const report = repairReports.find((r: any) => (r.equipment_code ?? r.equipmentCode) === code)
-
-            return {
-              id: String(id ?? ''),
-              name: String(name ?? ''),
-              code: String(code ?? ''),
-              type,
-              status: report ? (report.status === 'completed' ? 'working' : 'repair') : status,
-              position: { x: Math.max(2, Math.min(98, Math.round(posX))), y: Math.max(2, Math.min(98, Math.round(posY))) },
-              tableNumber,
-              side: (side === 'right' ? 'right' : 'left') as any,
-              row,
-              seat,
-              room: String(roomField ?? apiRoom),
-              needsRepair: !!report && report.status !== 'completed',
-              repairDescription: report ? (report.description ?? report.note ?? undefined) : (d.repairDescription ?? d.repair_description ?? undefined),
-            }
-          })
-
-          setRoomEquipment(normalized)
-
-          if (task?.equipmentCode) {
-            const found = normalized.find((d) => d.code === task.equipmentCode)
-            if (found) setTargetEquipment(found)
-          }
-
-          if (normalized.length === 0) {
-            console.debug('[RoomMap] no DB rows for room', apiRoom)
-          }
-          return
-        }
-        // If primary API returned non-ok (404), try legacy PHP endpoint that returns all equipment and filter by room
-        try {
-          const legacy = await fetch('/api/endpoints/equipment.php')
-          if (legacy.ok) {
-            const all = await legacy.json()
-            const filtered = Array.isArray(all)
-              ? all.filter((r: any) => {
-                  const roomVal = (r.room ?? r.room_code ?? r.roomCode ?? '').toString().replace(/[^a-zA-Z0-9]/g, '').toUpperCase()
-                  return roomVal === apiRoom
-                })
-              : []
-
-            if (filtered.length > 0) {
-              const normalizedLegacy: Equipment[] = filtered.map((d: any, idx: number) => {
-                const id = d.id ?? d.equipment_id ?? d.equipmentId ?? d.eq_id ?? idx
-                const code = d.code ?? d.equipment_code ?? d.equipmentCode ?? ''
-                const name = d.name ?? d.equipment_name ?? d.equipmentName ?? code
-                const type = (d.type ?? d.equipment_type ?? 'computer') as any
-                const status = (d.status ?? d.equipment_status ?? 'working') as any
-                const posX = Number(d.position_x ?? d.positionX ?? d.position?.x ?? d.x ?? 50)
-                const posY = Number(d.position_y ?? d.positionY ?? d.position?.y ?? d.y ?? 50)
-                const tableNumber = Number(d.table_number ?? d.tableNumber ?? d.table ?? 0) || 0
-                const side = d.side ?? (tableNumber ? 'left' : 'left')
-                const row = Number(d.row_number ?? d.row ?? 0) || 0
-                const seat = Number(d.seat ?? 0) || 0
-                const roomField = (d.room ?? d.room_code ?? d.roomCode ?? apiRoom) as string
-                const report = repairReports.find((r: any) => (r.equipment_code ?? r.equipmentCode) === code)
-                return {
-                  id: String(id ?? ''),
-                  name: String(name ?? ''),
-                  code: String(code ?? ''),
-                  type,
-                  status: report ? (report.status === 'completed' ? 'working' : 'repair') : status,
-                  position: { x: Math.max(2, Math.min(98, Math.round(posX))), y: Math.max(2, Math.min(98, Math.round(posY))) },
-                  tableNumber,
-                  side: (side === 'right' ? 'right' : 'left') as any,
-                  row,
-                  seat,
-                  room: String(roomField ?? apiRoom),
-                  needsRepair: !!report && report.status !== 'completed',
-                  repairDescription: report ? (report.description ?? report.note ?? undefined) : (d.repairDescription ?? d.repair_description ?? undefined),
-                }
-              })
-
-              setRoomEquipment(normalizedLegacy)
-              if (task?.equipmentCode) {
-                const found = normalizedLegacy.find((d) => d.code === task.equipmentCode)
-                if (found) setTargetEquipment(found)
+              // Use proper positioning based on table number or fallback to default grid
+              let posX = Number(d.position_x ?? d.positionX ?? d.position?.x ?? d.x)
+              let posY = Number(d.position_y ?? d.positionY ?? d.position?.y ?? d.y)
+              
+              const tableNumber = Number(d.table_number ?? d.tableNumber ?? d.table ?? idx + 1) || (idx + 1)
+              
+              // If no proper position data, calculate based on table number
+              if (!posX || !posY || (posX === 0 && posY === 0)) {
+                const side = tableNumber <= 25 ? 'left' : 'right'
+                const baseX = side === 'left' ? 15 : 65
+                const relativeTable = side === 'left' ? tableNumber : (tableNumber - 25)
+                const row = Math.ceil(relativeTable / 5)
+                const seat = ((relativeTable - 1) % 5) + 1
+                
+                posX = baseX + (seat - 1) * 5.5
+                posY = 30 + (row - 1) * 10
               }
-              return
+              
+              const side = d.side ?? (tableNumber <= 25 ? 'left' : 'right')
+              const row = Number(d.row_number ?? d.row ?? Math.ceil(tableNumber / 5)) || Math.ceil(tableNumber / 5)
+              const seat = Number(d.seat ?? ((tableNumber - 1) % 5) + 1) || ((tableNumber - 1) % 5) + 1
+              const roomField = (d.room ?? d.room_code ?? d.roomCode ?? apiRoom) as string
+
+              const report = repairs.find((r: any) => (r.equipment_code ?? r.equipmentCode ?? r.code) === code)
+              
+              // Determine final status: only show repair if there's an active repair request
+              let finalStatus = 'working' // Default all equipment to working
+              let needsRepair = false
+              
+              // Only mark as repair if there's an active repair request
+              if (report && report.status !== 'completed') {
+                finalStatus = 'repair'
+                needsRepair = true
+              }
+
+              console.debug('[Equipment]', code, 'DB status:', status, 'Report:', report?.status, 'Final status:', finalStatus)
+
+              return {
+                id: String(id ?? ''),
+                name: String(name ?? ''),
+                code: String(code ?? ''),
+                type,
+                status: finalStatus,
+                position: { x: Math.max(2, Math.min(98, Math.round(posX))), y: Math.max(2, Math.min(98, Math.round(posY))) },
+                tableNumber,
+                side: (side === 'right' ? 'right' : 'left') as any,
+                row,
+                seat,
+                room: String(roomField ?? apiRoom),
+                needsRepair,
+                repairDescription: report ? (report.description ?? report.note ?? undefined) : (d.repairDescription ?? d.repair_description ?? undefined),
+              }
+            })
+
+            setRoomEquipment(normalized)
+            console.debug('[RoomMap] Set equipment for room', apiRoom, 'count:', normalized.length)
+
+            if (task?.equipmentCode) {
+              const found = normalized.find((d) => d.code === task.equipmentCode)
+              if (found) setTargetEquipment(found)
             }
+            return
+          } else {
+            console.debug('[RoomMap] No equipment data from API, using generated layout')
           }
-        } catch (e) {
-          // ignore legacy endpoint errors
+        } else {
+          console.debug('[RoomMap] Equipment API failed, generating fallback for room:', apiRoom)
         }
       } catch (e) {
-        console.debug('[RoomMap] loadEquipment error', e)
+        console.debug('[RoomMap] loadEquipment error for room:', apiRoom, e)
       }
-
-  // on error or non-ok response: provide a safe generated layout (all 'working') but do not show toast
-  const safeGenerated = generateEquipmentForRoom(apiRoom || 'LC207').map((eq) => ({ ...eq, status: 'working' as const, needsRepair: false }))
-  setRoomEquipment(safeGenerated)
-  console.debug('[RoomMap] using safe generated layout for room', apiRoom)
+      
+      // Always ensure we have equipment to display, use generated layout if API failed
+      const safeGenerated = generateEquipmentForRoom(apiRoom || 'LC207').map((eq) => ({ 
+        ...eq, 
+        status: 'working' as const, 
+        needsRepair: false 
+      }))
+      
+      if (roomEquipment.length === 0 || roomEquipment[0]?.code?.includes('LOADING')) {
+        setRoomEquipment(safeGenerated)
+        console.debug('[RoomMap] Using generated equipment layout for room:', apiRoom, 'count:', safeGenerated.length)
+      }
     }
 
     loadEquipment()
@@ -515,19 +531,23 @@ export default function RoomMapPage() {
   }
 
   const getStatusColor = (equipment: Equipment) => {
+    // Priority 1: If this is the target equipment from the task, always show as repair (red with animation)
     if (equipment.code === task?.equipmentCode) {
       return "bg-red-500 hover:bg-red-600 ring-4 ring-red-200 animate-pulse shadow-lg shadow-red-200"
     }
-    switch (equipment.status) {
-      case "working":
-        return "bg-green-500 hover:bg-green-600 shadow-md shadow-green-200"
-      case "repair":
-        return "bg-red-500 hover:bg-red-600 shadow-md shadow-red-200"
-      case "maintenance":
-        return "bg-yellow-500 hover:bg-yellow-600 shadow-md shadow-yellow-200"
-      default:
-        return "bg-gray-500 hover:bg-gray-600 shadow-md shadow-gray-200"
+    
+    // Priority 2: If equipment has needsRepair flag (from repair requests), show as repair
+    if (equipment.needsRepair) {
+      return "bg-red-500 hover:bg-red-600 shadow-md shadow-red-200"
     }
+    
+    // Priority 3: Only show red if explicitly marked as repair, everything else is green (working)
+    if (equipment.status === "repair") {
+      return "bg-red-500 hover:bg-red-600 shadow-md shadow-red-200"
+    }
+    
+    // Default: All other equipment shows as working (green)
+    return "bg-green-500 hover:bg-green-600 shadow-md shadow-green-200"
   }
 
   const updateEquipmentStatus = (equipmentId: string, newStatus: "working" | "repair" | "maintenance") => {
@@ -770,19 +790,11 @@ export default function RoomMapPage() {
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <div className="w-4 h-4 bg-red-500 rounded-full ring-2 ring-red-200 animate-pulse"></div>
-                      <span className="text-sm font-medium text-red-700">ครุภัณฑ์ที่ต้องซ่อม</span>
+                      <span className="text-sm font-medium text-red-700">ครุภัณฑ์ที่ต้องซ่อม (มีรายงาน)</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                      <span className="text-sm">ใช้งานได้</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                      <span className="text-sm">ต้องซ่อม</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-                      <span className="text-sm">บำรุงรักษา</span>
+                      <span className="text-sm text-green-700">ใช้งานได้ปกติ</span>
                     </div>
                   </div>
                 </div>
@@ -853,29 +865,29 @@ export default function RoomMapPage() {
                       <div
                         key={equipment.id}
                         className={`absolute w-6 h-6 sm:w-10 sm:h-10 rounded-full text-white flex items-center justify-center transition-all hover:scale-110 cursor-pointer ${getStatusColor(equipment)} border-2 border-white`}
-                        style={{
-                          left: `${equipment.position.x}%`,
-                          top: `${equipment.position.y}%`,
-                          transform: "translate(-50%, -50%)",
-                        }}
-                        title={`${equipment.name} (${equipment.code}) - โต๊ะที่ ${equipment.tableNumber}`}
-                        onClick={() => {
-                          setSelectedEquipment(equipment)
-                          setShowEquipmentDialog(true)
-                        }}
-                      >
-                        {equipment.type === "computer" ? (
-                          <span className="text-xs sm:text-sm font-bold">
-                            {equipment.tableNumber > 0 ? equipment.tableNumber : ""}
-                          </span>
-                        ) : (
-                          getEquipmentIcon(equipment.type)
-                        )}
-                        {equipment.code === task?.equipmentCode && canUpdate && (
-                          <div className="absolute -top-6 sm:-top-10 left-1/2 transform -translate-x-1/2 bg-red-600 text-white px-1 sm:px-2 py-1 rounded-full text-xs whitespace-nowrap shadow-lg animate-bounce">
-                            🎯 ต้องซ่อม
-                          </div>
-                        )}
+                          style={{
+                            left: `${equipment.position.x}%`,
+                            top: `${equipment.position.y}%`,
+                            transform: "translate(-50%, -50%)",
+                          }}
+                          title={`${equipment.name} (${equipment.code}) - โต๊ะที่ ${equipment.tableNumber}`}
+                          onClick={() => {
+                            setSelectedEquipment(equipment)
+                            setShowEquipmentDialog(true)
+                          }}
+                        >
+                          {equipment.type === "computer" ? (
+                            <span className="text-xs sm:text-sm font-bold">
+                              {equipment.tableNumber > 0 ? equipment.tableNumber : ""}
+                            </span>
+                          ) : (
+                            getEquipmentIcon(equipment.type)
+                          )}
+                          {equipment.code === task?.equipmentCode && canUpdate && (
+                            <div className="absolute -top-6 sm:-top-10 left-1/2 transform -translate-x-1/2 bg-red-600 text-white px-1 sm:px-2 py-1 rounded-full text-xs whitespace-nowrap shadow-lg animate-bounce">
+                              🎯 ต้องซ่อม
+                            </div>
+                          )}
                       </div>
                     ))}
 

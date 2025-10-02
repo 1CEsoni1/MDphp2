@@ -1,7 +1,7 @@
 <?php
 class RepairRequest {
     private $conn;
-    private $table_name = "repair_requests";
+    private $table_name = "tb_repair_requests";
 
     public $id;
     public $equipment_code;
@@ -25,8 +25,8 @@ class RepairRequest {
     public function getAll() {
         $query = "SELECT r.*, u.name as assigned_to_name 
                   FROM " . $this->table_name . " r 
-                  LEFT JOIN users u ON r.assigned_to = u.id 
-                  ORDER BY r.created_date DESC";
+                  LEFT JOIN tb_users u ON r.assigned_to = u.id 
+                  ORDER BY r.created_at DESC";
         $stmt = $this->conn->prepare($query);
         $stmt->execute();
         return $stmt;
@@ -35,9 +35,22 @@ class RepairRequest {
     public function getByTechnician($technician_id) {
         $query = "SELECT r.*, u.name as assigned_to_name 
                   FROM " . $this->table_name . " r 
-                  LEFT JOIN users u ON r.assigned_to = u.id 
+                  LEFT JOIN tb_users u ON r.assigned_to = u.id 
                   WHERE r.assigned_to = ? 
-                  ORDER BY r.created_date DESC";
+                  ORDER BY r.created_at DESC";
+        $stmt = $this->conn->prepare($query);
+        $stmt->bindParam(1, $technician_id);
+        $stmt->execute();
+        return $stmt;
+    }
+
+    public function getByTechnicianRooms($technician_id) {
+        $query = "SELECT r.*, u.name as assigned_to_name, room.name as room_name 
+                  FROM " . $this->table_name . " r 
+                  LEFT JOIN tb_users u ON r.assigned_to = u.id 
+                  LEFT JOIN tb_room room ON r.room = room.code 
+                  WHERE room.assigned_technician = ? 
+                  ORDER BY r.created_at DESC";
         $stmt = $this->conn->prepare($query);
         $stmt->bindParam(1, $technician_id);
         $stmt->execute();

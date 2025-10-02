@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Sep 03, 2025 at 04:39 PM
+-- Generation Time: Sep 30, 2025 at 07:09 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -455,11 +455,13 @@ CREATE TABLE `tb_repair_requests` (
 --
 
 INSERT INTO `tb_repair_requests` (`id`, `equipment_code`, `equipment_name`, `building`, `floor`, `room`, `status`, `description`, `reporter`, `assigned_to`, `priority`, `report_date`, `assigned_date`, `completed_date`, `images`, `notes`, `created_at`, `updated_at`) VALUES
-(1, 'PC-LC207-01', 'คอมพิวเตอร์ 01', 'LC', 2, 'LC207', 'in-progress', 'คอมพิวเตอร์เปิดไม่ติด มีเสียง beep', 'อาจารย์สมชาย', '0202', 'high', '2024-01-15', NULL, NULL, NULL, NULL, '2025-09-02 07:53:07', '2025-09-03 09:06:00'),
-(2, 'PC-LC207-02', 'คอมพิวเตอร์ 02', 'LC', 2, 'LC207', 'in-progress', 'จอคอมพิวเตอร์ไม่แสดงผล มีไฟกระพริบ', 'อาจารย์สมหญิง', '0202', 'medium', '2024-01-14', NULL, NULL, NULL, NULL, '2025-09-02 07:53:07', '2025-09-03 08:58:14'),
-(3, 'PC-LC205-01', 'คอมพิวเตอร์ 03', 'LC', 2, 'LC205', 'in-progress', 'คอมพิวเตอร์รีสตาร์ทเองบ่อย', 'อาจารย์สมศรี', '0202', 'high', '2024-01-13', NULL, NULL, NULL, NULL, '2025-09-02 07:53:07', '2025-09-02 07:53:07'),
+(1, 'PC-LC204-01', 'คอมพิวเตอร์ 01', 'LC', 2, 'LC204', 'in-progress', 'คอมพิวเตอร์เปิดไม่ติด มีเสียง beep', 'อาจารย์สมชาย', '0202', 'high', '2024-01-15', NULL, NULL, NULL, NULL, '2025-09-02 07:53:07', '2025-09-30 16:38:13'),
+(2, 'PC-LC204-02', 'คอมพิวเตอร์ 02', 'LC', 2, 'LC204', 'in-progress', 'จอคอมพิวเตอร์ไม่แสดงผล มีไฟกระพริบ', 'อาจารย์สมหญิง', '0202', 'medium', '2024-01-14', NULL, NULL, NULL, NULL, '2025-09-02 07:53:07', '2025-09-30 16:38:27'),
+(3, 'PC-LC205-01', 'คอมพิวเตอร์ 03', 'LC', 2, 'LC205', 'in-progress', 'คอมพิวเตอร์รีสตาร์ทเองบ่อย', 'อาจารย์สมศรี', '0201', 'high', '2024-01-13', NULL, NULL, NULL, NULL, '2025-09-02 07:53:07', '2025-09-30 16:34:15'),
 (4, 'PC-LC204-01', 'คอมพิวเตอร์ 04', 'LC', 2, 'LC204', 'completed', 'คอมพิวเตอร์เปิดติดแต่เข้า Windows ไม่ได้', 'อาจารย์สมหมาย', '0202', 'low', '2024-01-12', NULL, NULL, NULL, NULL, '2025-09-02 07:53:07', '2025-09-03 09:12:51'),
-(5, 'PC-LC207-03', 'คอมพิวเตอร์ 05', 'LC', 2, 'LC207', 'pending', 'เครื่องเปิดไม่ติด จอไม่ขึ้น', 'อาจารย์ปรีชา', NULL, 'high', '2025-09-02', NULL, NULL, NULL, NULL, '2025-09-03 12:06:34', '2025-09-03 14:15:48');
+(5, 'PC-LC207-03', 'คอมพิวเตอร์ 05', 'LC', 2, 'LC207', 'in-progress', 'เครื่องเปิดไม่ติด จอไม่ขึ้น', 'อาจารย์ปรีชา', '0201', 'high', '2025-09-02', NULL, NULL, NULL, NULL, '2025-09-03 12:06:34', '2025-09-30 16:29:37'),
+(12, 'PC-LC207-11', 'คอมพิวเตอร์ 11', 'LC', 2, 'LC207', 'in-progress', 'จอไม่แสดงผล มีเสียงบี๊บ', 'อาจารย์สมชาย', '0201', 'high', '2025-09-30', NULL, NULL, NULL, NULL, '2025-09-30 16:28:14', '2025-09-30 16:57:34'),
+(13, 'PC-LC205-05', 'คอมพิวเตอร์ 05', 'LC', 2, 'LC205', 'in-progress', 'เมาส์ทำงานผิดปกติ', 'อาจารย์สมหญิง', '0201', 'high', '2025-09-30', NULL, NULL, NULL, NULL, '2025-09-30 16:28:14', '2025-09-30 17:07:31');
 
 -- --------------------------------------------------------
 
@@ -473,17 +475,18 @@ CREATE TABLE `tb_room` (
   `name` varchar(150) DEFAULT NULL,
   `building` varchar(50) DEFAULT NULL,
   `floor` int(11) DEFAULT NULL,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `assigned_technician` char(4) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data for table `tb_room`
 --
 
-INSERT INTO `tb_room` (`id`, `code`, `name`, `building`, `floor`, `created_at`) VALUES
-(1, 'LC207', 'LC207', 'LC', 2, '2025-09-03 14:37:01'),
-(2, 'LC204', 'LC204', 'LC', 2, '2025-09-03 14:37:01'),
-(3, 'LC205', 'LC205', 'LC', 2, '2025-09-03 14:37:01');
+INSERT INTO `tb_room` (`id`, `code`, `name`, `building`, `floor`, `created_at`, `assigned_technician`) VALUES
+(1, 'LC207', 'LC207', 'LC', 2, '2025-09-03 14:37:01', '0201'),
+(2, 'LC204', 'LC204', 'LC', 2, '2025-09-03 14:37:01', '0202'),
+(3, 'LC205', 'LC205', 'LC', 2, '2025-09-03 14:37:01', '0201');
 
 -- --------------------------------------------------------
 
@@ -515,7 +518,16 @@ INSERT INTO `tb_status_logs` (`id`, `repair_request_id`, `old_status`, `new_stat
 (8, 2, 'assigned', 'in-progress', '0202', '2025-09-03 08:58:06'),
 (9, 1, 'completed', 'in-progress', '0202', '2025-09-03 09:06:00'),
 (10, 4, 'completed', 'in-progress', '0202', '2025-09-03 09:12:44'),
-(11, 4, 'in-progress', 'completed', '0202', '2025-09-03 09:12:51');
+(11, 4, 'in-progress', 'completed', '0202', '2025-09-03 09:12:51'),
+(13, 13, 'pending', 'in-progress', '0201', '2025-09-30 16:29:12'),
+(14, 13, 'pending', 'in-progress', '0201', '2025-09-30 16:29:12'),
+(15, 13, 'pending', 'in-progress', '0201', '2025-09-30 16:29:12'),
+(16, 13, 'pending', 'in-progress', '0201', '2025-09-30 16:29:12'),
+(17, 5, 'pending', 'in-progress', '0201', '2025-09-30 16:29:37'),
+(18, 13, 'pending', 'in-progress', '0201', '2025-09-30 16:53:39'),
+(19, 13, 'pending', 'in-progress', '0201', '2025-09-30 16:54:57'),
+(20, 13, 'pending', 'in-progress', '0201', '2025-09-30 16:56:47'),
+(21, 12, 'assigned', 'in-progress', '0201', '2025-09-30 16:57:34');
 
 -- --------------------------------------------------------
 
@@ -610,7 +622,8 @@ ALTER TABLE `tb_repair_requests`
 --
 ALTER TABLE `tb_room`
   ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `code` (`code`);
+  ADD UNIQUE KEY `code` (`code`),
+  ADD KEY `fk_room_assigned_technician` (`assigned_technician`);
 
 --
 -- Indexes for table `tb_status_logs`
@@ -666,7 +679,7 @@ ALTER TABLE `tb_notes`
 -- AUTO_INCREMENT for table `tb_repair_requests`
 --
 ALTER TABLE `tb_repair_requests`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=14;
 
 --
 -- AUTO_INCREMENT for table `tb_room`
@@ -678,7 +691,7 @@ ALTER TABLE `tb_room`
 -- AUTO_INCREMENT for table `tb_status_logs`
 --
 ALTER TABLE `tb_status_logs`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=22;
 
 --
 -- Constraints for dumped tables
@@ -716,6 +729,12 @@ ALTER TABLE `tb_repair_requests`
   ADD CONSTRAINT `fk_requests_assigned_user` FOREIGN KEY (`assigned_to`) REFERENCES `tb_users` (`id`) ON DELETE SET NULL,
   ADD CONSTRAINT `fk_rr_assigned_to` FOREIGN KEY (`assigned_to`) REFERENCES `tb_users` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
   ADD CONSTRAINT `fk_rr_equipment_code` FOREIGN KEY (`equipment_code`) REFERENCES `tb_equipment` (`code`) ON UPDATE CASCADE;
+
+--
+-- Constraints for table `tb_room`
+--
+ALTER TABLE `tb_room`
+  ADD CONSTRAINT `fk_room_assigned_technician` FOREIGN KEY (`assigned_technician`) REFERENCES `tb_users` (`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 --
 -- Constraints for table `tb_status_logs`

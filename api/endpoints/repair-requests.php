@@ -12,6 +12,10 @@ switch($method) {
     case 'GET':
         if(isset($_GET['technician_id'])) {
             $stmt = $repair_request->getByTechnician($_GET['technician_id']);
+        } elseif(isset($_GET['technician_rooms']) && isset($_GET['technician_id'])) {
+            $stmt = $repair_request->getByTechnicianRooms($_GET['technician_id']);
+        } elseif(isset($_GET['my_rooms']) && isset($_GET['user_id'])) {
+            $stmt = $repair_request->getByTechnicianRooms($_GET['user_id']);
         } else {
             $stmt = $repair_request->getAll();
         }
