@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Sep 30, 2025 at 07:09 PM
+-- Generation Time: Oct 03, 2025 at 03:09 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -398,7 +398,28 @@ CREATE TABLE `tb_images` (
 INSERT INTO `tb_images` (`id`, `repair_request_id`, `image_url`, `uploaded_by`, `uploaded_at`) VALUES
 (1, 1, 'https://example.com/images/pc1-error.jpg', '0201', '2025-09-02 07:53:07'),
 (2, 2, 'https://example.com/images/pc2-screen.jpg', '0201', '2025-09-02 07:53:07'),
-(3, 3, 'https://example.com/images/pc3-repair.jpg', '0202', '2025-09-02 07:53:07');
+(3, 3, 'https://example.com/images/pc3-repair.jpg', '0202', '2025-09-02 07:53:07'),
+(4, 8, '1759399039655-bell.png', '0202', '2025-10-02 09:57:19'),
+(5, 8, '1759399483792-bell.png', '0202', '2025-10-02 10:04:43'),
+(6, 8, '1759399718471-bell.png', '0202', '2025-10-02 10:08:38'),
+(7, 3, '1759490615740-bell.png', '0201', '2025-10-03 11:23:35'),
+(8, 3, '1759491051070-bell.png', '0201', '2025-10-03 11:30:51'),
+(9, 5, '1759491431698-man.png', '0201', '2025-10-03 11:37:11'),
+(10, 5, '1759491692949-bell.png', '0201', '2025-10-03 11:41:32'),
+(11, 5, '1759492195628-bell.png', '0201', '2025-10-03 11:49:55'),
+(12, 5, '1759492457606-catty.jpg', '0201', '2025-10-03 11:54:17'),
+(13, 3, '1759492656419-bell.png', '0201', '2025-10-03 11:57:36'),
+(14, 5, '1759494080854-bell.png', '0201', '2025-10-03 12:21:20'),
+(15, 5, '1759494742714-bell.png', '0201', '2025-10-03 12:32:22'),
+(16, 5, '1759494793772-bell.png', '0201', '2025-10-03 12:33:13'),
+(17, 5, '1759494936644-man.png', '0201', '2025-10-03 12:35:36'),
+(18, 11, '1759495978324-bell.png', '0201', '2025-10-03 12:52:58'),
+(19, 11, '1759496000052-bell.png', '0201', '2025-10-03 12:53:20'),
+(20, 11, '1759496103227-bell.png', '0201', '2025-10-03 12:55:03'),
+(21, 11, '1759496345755-bell.png', '0201', '2025-10-03 12:59:05'),
+(22, 11, '1759496488400-bell.png', '0201', '2025-10-03 13:01:28'),
+(23, 3, '1759496760903-bell.png', '0201', '2025-10-03 13:06:00'),
+(24, 3, '1759496784043-bell.png', '0201', '2025-10-03 13:06:24');
 
 -- --------------------------------------------------------
 
@@ -455,13 +476,16 @@ CREATE TABLE `tb_repair_requests` (
 --
 
 INSERT INTO `tb_repair_requests` (`id`, `equipment_code`, `equipment_name`, `building`, `floor`, `room`, `status`, `description`, `reporter`, `assigned_to`, `priority`, `report_date`, `assigned_date`, `completed_date`, `images`, `notes`, `created_at`, `updated_at`) VALUES
-(1, 'PC-LC204-01', 'คอมพิวเตอร์ 01', 'LC', 2, 'LC204', 'in-progress', 'คอมพิวเตอร์เปิดไม่ติด มีเสียง beep', 'อาจารย์สมชาย', '0202', 'high', '2024-01-15', NULL, NULL, NULL, NULL, '2025-09-02 07:53:07', '2025-09-30 16:38:13'),
-(2, 'PC-LC204-02', 'คอมพิวเตอร์ 02', 'LC', 2, 'LC204', 'in-progress', 'จอคอมพิวเตอร์ไม่แสดงผล มีไฟกระพริบ', 'อาจารย์สมหญิง', '0202', 'medium', '2024-01-14', NULL, NULL, NULL, NULL, '2025-09-02 07:53:07', '2025-09-30 16:38:27'),
-(3, 'PC-LC205-01', 'คอมพิวเตอร์ 03', 'LC', 2, 'LC205', 'in-progress', 'คอมพิวเตอร์รีสตาร์ทเองบ่อย', 'อาจารย์สมศรี', '0201', 'high', '2024-01-13', NULL, NULL, NULL, NULL, '2025-09-02 07:53:07', '2025-09-30 16:34:15'),
-(4, 'PC-LC204-01', 'คอมพิวเตอร์ 04', 'LC', 2, 'LC204', 'completed', 'คอมพิวเตอร์เปิดติดแต่เข้า Windows ไม่ได้', 'อาจารย์สมหมาย', '0202', 'low', '2024-01-12', NULL, NULL, NULL, NULL, '2025-09-02 07:53:07', '2025-09-03 09:12:51'),
-(5, 'PC-LC207-03', 'คอมพิวเตอร์ 05', 'LC', 2, 'LC207', 'in-progress', 'เครื่องเปิดไม่ติด จอไม่ขึ้น', 'อาจารย์ปรีชา', '0201', 'high', '2025-09-02', NULL, NULL, NULL, NULL, '2025-09-03 12:06:34', '2025-09-30 16:29:37'),
-(12, 'PC-LC207-11', 'คอมพิวเตอร์ 11', 'LC', 2, 'LC207', 'in-progress', 'จอไม่แสดงผล มีเสียงบี๊บ', 'อาจารย์สมชาย', '0201', 'high', '2025-09-30', NULL, NULL, NULL, NULL, '2025-09-30 16:28:14', '2025-09-30 16:57:34'),
-(13, 'PC-LC205-05', 'คอมพิวเตอร์ 05', 'LC', 2, 'LC205', 'in-progress', 'เมาส์ทำงานผิดปกติ', 'อาจารย์สมหญิง', '0201', 'high', '2025-09-30', NULL, NULL, NULL, NULL, '2025-09-30 16:28:14', '2025-09-30 17:07:31');
+(1, 'PC-LC204-01', 'คอมพิวเตอร์ 01', 'LC', 2, 'LC204', 'in-progress', 'คอมพิวเตอร์เปิดไม่ติด มีเสียง beep', 'อาจารย์สมชาย', '0202', 'high', '2024-01-15', NULL, NULL, NULL, NULL, '2025-09-02 07:53:07', '2025-10-02 09:48:38'),
+(2, 'PC-LC204-02', 'คอมพิวเตอร์ 02', 'LC', 2, 'LC204', 'in-progress', 'จอคอมพิวเตอร์ไม่แสดงผล มีไฟกระพริบ', 'อาจารย์สมหญิง', '0202', 'medium', '2024-01-14', NULL, NULL, NULL, NULL, '2025-09-02 07:53:07', '2025-10-02 09:48:38'),
+(3, 'PC-LC205-01', 'คอมพิวเตอร์ 01', 'LC', 2, 'LC205', 'completed', 'คอมพิวเตอร์รีสตาร์ทเองบ่อย', 'อาจารย์สมศรี', '0201', 'high', '2024-01-13', '2025-10-03 13:05:56', '2025-10-03 13:06:24', '[\"1759490615740-bell.png\",\"1759491051070-bell.png\",\"1759492656419-bell.png\",\"1759496760903-bell.png\",\"1759496784043-bell.png\"]', 'csdsd', '2025-09-02 07:53:07', '2025-10-03 13:06:24'),
+(4, 'PC-LC204-01', 'คอมพิวเตอร์ 04', 'LC', 2, 'LC204', 'completed', 'คอมพิวเตอร์เปิดติดแต่เข้า Windows ไม่ได้', 'อาจารย์สมหมาย', '0202', 'low', '2024-01-12', NULL, NULL, NULL, NULL, '2025-09-02 07:53:07', '2025-10-02 09:48:38'),
+(5, 'PC-LC207-03', 'คอมพิวเตอร์ 05', 'LC', 2, 'LC207', 'completed', 'เครื่องเปิดไม่ติด จอไม่ขึ้น', 'อาจารย์ปรีชา', '0201', 'high', '2025-09-02', '2025-10-03 12:35:17', '2025-10-03 12:35:36', '[\"1759494936644-man.png\"]', '00000', '2025-09-03 12:06:34', '2025-10-03 12:35:36'),
+(6, 'PC-LC207-11', 'คอมพิวเตอร์ 11', 'LC', 2, 'LC207', 'in-progress', 'จอไม่แสดงผล มีเสียงบี๊บ', 'อาจารย์สมชาย', '0201', 'medium', '2025-09-30', NULL, NULL, NULL, NULL, '2025-09-30 16:28:14', '2025-10-02 09:48:38'),
+(7, 'PC-LC205-05', 'คอมพิวเตอร์ 05', 'LC', 2, 'LC205', 'in-progress', 'เมาส์ทำงานผิดปกติ', 'อาจารย์สมหญิง', '0201', 'low', '2025-09-30', NULL, NULL, NULL, NULL, '2025-09-30 16:28:14', '2025-10-02 09:48:38'),
+(8, 'PC-LC204-44', 'คอมพิวเตอร์ 44', 'LC', 2, 'LC204', 'completed', 'จอเขียว', 'อาจารย์สมปอง', '0202', 'medium', '2025-10-02', '2025-10-01 17:00:00', '2025-10-02 10:08:38', '[\"1759399718471-bell.png\"]', 'ยยยยยยยยยยยยยยย', '2025-10-02 09:07:28', '2025-10-02 10:08:38'),
+(9, 'PC-LC204-43', 'คอมพิวเตอร์ 43', 'LC', 2, 'LC204', 'pending', 'จอดำ', 'อาจารย์สมปอง', '0202', 'medium', '2025-10-02', '2025-10-01 17:00:00', NULL, NULL, NULL, '2025-10-02 09:06:04', '2025-10-02 09:48:38'),
+(11, 'PC-LC207-20', 'คอมพิวเตอร์ 20', 'LC', 2, 'LC207', 'completed', 'sssssss', 'อาจารย์สมสัก', '0201', 'medium', '2025-10-03', '2025-10-03 12:47:18', '2025-10-03 13:01:28', '[\"1759496488400-bell.png\"]', 'dsdsdsd', '2025-10-03 12:47:18', '2025-10-03 13:01:28');
 
 -- --------------------------------------------------------
 
@@ -519,15 +543,54 @@ INSERT INTO `tb_status_logs` (`id`, `repair_request_id`, `old_status`, `new_stat
 (9, 1, 'completed', 'in-progress', '0202', '2025-09-03 09:06:00'),
 (10, 4, 'completed', 'in-progress', '0202', '2025-09-03 09:12:44'),
 (11, 4, 'in-progress', 'completed', '0202', '2025-09-03 09:12:51'),
-(13, 13, 'pending', 'in-progress', '0201', '2025-09-30 16:29:12'),
-(14, 13, 'pending', 'in-progress', '0201', '2025-09-30 16:29:12'),
-(15, 13, 'pending', 'in-progress', '0201', '2025-09-30 16:29:12'),
-(16, 13, 'pending', 'in-progress', '0201', '2025-09-30 16:29:12'),
+(13, 7, 'pending', 'in-progress', '0201', '2025-09-30 16:29:12'),
+(14, 7, 'pending', 'in-progress', '0201', '2025-09-30 16:29:12'),
+(15, 7, 'pending', 'in-progress', '0201', '2025-09-30 16:29:12'),
+(16, 7, 'pending', 'in-progress', '0201', '2025-09-30 16:29:12'),
 (17, 5, 'pending', 'in-progress', '0201', '2025-09-30 16:29:37'),
-(18, 13, 'pending', 'in-progress', '0201', '2025-09-30 16:53:39'),
-(19, 13, 'pending', 'in-progress', '0201', '2025-09-30 16:54:57'),
-(20, 13, 'pending', 'in-progress', '0201', '2025-09-30 16:56:47'),
-(21, 12, 'assigned', 'in-progress', '0201', '2025-09-30 16:57:34');
+(18, 7, 'pending', 'in-progress', '0201', '2025-09-30 16:53:39'),
+(19, 7, 'pending', 'in-progress', '0201', '2025-09-30 16:54:57'),
+(20, 7, 'pending', 'in-progress', '0201', '2025-09-30 16:56:47'),
+(21, 6, 'assigned', 'in-progress', '0201', '2025-09-30 16:57:34'),
+(22, 8, 'pending', 'in-progress', '0202', '2025-10-02 09:51:18'),
+(23, 8, 'pending', 'in-progress', '0202', '2025-10-02 09:51:18'),
+(24, 8, 'pending', 'in-progress', '0202', '2025-10-02 09:51:53'),
+(25, 8, 'pending', 'in-progress', '0202', '2025-10-02 09:52:25'),
+(26, 8, 'pending', 'in-progress', '0202', '2025-10-02 09:57:02'),
+(27, 8, 'in-progress', 'completed', '0202', '2025-10-02 09:57:19'),
+(28, 8, 'pending', 'in-progress', '0202', '2025-10-02 10:04:31'),
+(29, 8, 'in-progress', 'completed', '0202', '2025-10-02 10:04:43'),
+(30, 8, 'pending', 'in-progress', '0202', '2025-10-02 10:07:58'),
+(31, 8, 'in-progress', 'completed', '0202', '2025-10-02 10:08:38'),
+(32, 3, 'in-progress', 'completed', '0201', '2025-10-03 11:11:15'),
+(33, 3, 'in-progress', 'assigned', '0201', '2025-10-03 11:13:48'),
+(34, 3, 'assigned', 'in-progress', '0201', '2025-10-03 11:13:49'),
+(35, 3, 'in-progress', 'assigned', '0201', '2025-10-03 11:23:52'),
+(36, 3, 'assigned', 'in-progress', '0201', '2025-10-03 11:23:53'),
+(37, 5, 'in-progress', 'assigned', '0201', '2025-10-03 11:41:07'),
+(38, 5, 'assigned', 'in-progress', '0201', '2025-10-03 11:41:11'),
+(39, 5, 'in-progress', 'assigned', '0201', '2025-10-03 11:49:28'),
+(40, 5, 'assigned', 'in-progress', '0201', '2025-10-03 11:49:28'),
+(41, 5, 'in-progress', 'completed', '0201', '2025-10-03 11:49:55'),
+(42, 5, 'in-progress', 'assigned', '0201', '2025-10-03 11:53:54'),
+(43, 5, 'assigned', 'in-progress', '0201', '2025-10-03 11:53:54'),
+(44, 5, 'in-progress', 'completed', '0201', '2025-10-03 11:54:17'),
+(45, 3, 'in-progress', 'assigned', '0201', '2025-10-03 11:54:29'),
+(46, 3, 'assigned', 'in-progress', '0201', '2025-10-03 11:54:30'),
+(47, 3, 'in-progress', 'completed', '0201', '2025-10-03 11:57:36'),
+(48, 5, 'in-progress', 'assigned', '0201', '2025-10-03 12:20:54'),
+(49, 5, 'in-progress', 'completed', '0201', '2025-10-03 12:21:20'),
+(50, 5, 'in-progress', 'assigned', '0201', '2025-10-03 12:31:58'),
+(51, 5, 'assigned', 'in-progress', '0201', '2025-10-03 12:32:02'),
+(52, 5, 'in-progress', 'assigned', '0201', '2025-10-03 12:32:36'),
+(53, 5, 'assigned', 'in-progress', '0201', '2025-10-03 12:32:43'),
+(54, 5, 'in-progress', 'assigned', '0201', '2025-10-03 12:35:17'),
+(55, 5, 'in-progress', 'completed', '0201', '2025-10-03 12:35:36'),
+(57, 11, 'pending', 'in-progress', '0201', '2025-10-03 12:47:39'),
+(58, 11, 'in-progress', 'completed', '0201', '2025-10-03 13:01:28'),
+(59, 3, 'completed', 'assigned', '0201', '2025-10-03 13:05:56'),
+(60, 3, 'assigned', 'in-progress', '0201', '2025-10-03 13:06:00'),
+(61, 3, 'in-progress', 'completed', '0201', '2025-10-03 13:06:24');
 
 -- --------------------------------------------------------
 
@@ -667,7 +730,7 @@ ALTER TABLE `tb_equipment_location`
 -- AUTO_INCREMENT for table `tb_images`
 --
 ALTER TABLE `tb_images`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=25;
 
 --
 -- AUTO_INCREMENT for table `tb_notes`
@@ -679,7 +742,7 @@ ALTER TABLE `tb_notes`
 -- AUTO_INCREMENT for table `tb_repair_requests`
 --
 ALTER TABLE `tb_repair_requests`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=14;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=12;
 
 --
 -- AUTO_INCREMENT for table `tb_room`
@@ -691,7 +754,7 @@ ALTER TABLE `tb_room`
 -- AUTO_INCREMENT for table `tb_status_logs`
 --
 ALTER TABLE `tb_status_logs`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=22;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=62;
 
 --
 -- Constraints for dumped tables
@@ -708,8 +771,7 @@ ALTER TABLE `tb_equipment_location`
 -- Constraints for table `tb_images`
 --
 ALTER TABLE `tb_images`
-  ADD CONSTRAINT `fk_images_request` FOREIGN KEY (`repair_request_id`) REFERENCES `tb_repair_requests` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `fk_images_rrid` FOREIGN KEY (`repair_request_id`) REFERENCES `tb_repair_requests` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `fk_images_request` FOREIGN KEY (`repair_request_id`) REFERENCES `tb_repair_requests` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   ADD CONSTRAINT `fk_images_uploaded_by` FOREIGN KEY (`uploaded_by`) REFERENCES `tb_users` (`id`) ON UPDATE CASCADE,
   ADD CONSTRAINT `fk_images_user` FOREIGN KEY (`uploaded_by`) REFERENCES `tb_users` (`id`);
 
@@ -718,8 +780,7 @@ ALTER TABLE `tb_images`
 --
 ALTER TABLE `tb_notes`
   ADD CONSTRAINT `fk_notes_created_by` FOREIGN KEY (`created_by`) REFERENCES `tb_users` (`id`) ON UPDATE CASCADE,
-  ADD CONSTRAINT `fk_notes_request` FOREIGN KEY (`repair_request_id`) REFERENCES `tb_repair_requests` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `fk_notes_rrid` FOREIGN KEY (`repair_request_id`) REFERENCES `tb_repair_requests` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `fk_notes_request` FOREIGN KEY (`repair_request_id`) REFERENCES `tb_repair_requests` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   ADD CONSTRAINT `fk_notes_user` FOREIGN KEY (`created_by`) REFERENCES `tb_users` (`id`);
 
 --
@@ -740,10 +801,9 @@ ALTER TABLE `tb_room`
 -- Constraints for table `tb_status_logs`
 --
 ALTER TABLE `tb_status_logs`
-  ADD CONSTRAINT `fk_logs_request` FOREIGN KEY (`repair_request_id`) REFERENCES `tb_repair_requests` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `fk_logs_request` FOREIGN KEY (`repair_request_id`) REFERENCES `tb_repair_requests` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   ADD CONSTRAINT `fk_logs_user` FOREIGN KEY (`changed_by`) REFERENCES `tb_users` (`id`),
-  ADD CONSTRAINT `fk_statuslogs_changed_by` FOREIGN KEY (`changed_by`) REFERENCES `tb_users` (`id`) ON UPDATE CASCADE,
-  ADD CONSTRAINT `fk_statuslogs_rrid` FOREIGN KEY (`repair_request_id`) REFERENCES `tb_repair_requests` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+  ADD CONSTRAINT `fk_statuslogs_changed_by` FOREIGN KEY (`changed_by`) REFERENCES `tb_users` (`id`) ON UPDATE CASCADE;
 
 --
 -- Constraints for table `tb_users`
