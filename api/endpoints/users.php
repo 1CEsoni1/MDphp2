@@ -17,7 +17,7 @@ switch($method) {
             $user_item = array(
                 "id" => $row['id'],
                 "username" => $row['username'],
-                "type" => $row['type'],
+                "type" => $row['type_id'],
                 "name" => $row['name']
             );
             array_push($users, $user_item);

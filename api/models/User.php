@@ -1,7 +1,7 @@
 <?php
 class User {
     private $conn;
-    private $table_name = "users";
+    private $table_name = "tb_users";
 
     public $id;
     public $username;
@@ -14,7 +14,7 @@ class User {
     }
 
     public function login($username, $password) {
-        $query = "SELECT id, username, password, type, name FROM " . $this->table_name . " WHERE username = ? LIMIT 0,1";
+        $query = "SELECT id, username, password, type_id, name FROM " . $this->table_name . " WHERE username = ? LIMIT 0,1";
         $stmt = $this->conn->prepare($query);
         $stmt->bindParam(1, $username);
         $stmt->execute();
@@ -24,7 +24,7 @@ class User {
         if($row && password_verify($password, $row['password'])) {
             $this->id = $row['id'];
             $this->username = $row['username'];
-            $this->type = $row['type'];
+            $this->type = $row['type_id'];
             $this->name = $row['name'];
             return true;
         }
@@ -32,7 +32,7 @@ class User {
     }
 
     public function getAll() {
-        $query = "SELECT id, username, type, name FROM " . $this->table_name . " ORDER BY name";
+        $query = "SELECT id, username, type_id, name FROM " . $this->table_name . " ORDER BY name";
         $stmt = $this->conn->prepare($query);
         $stmt->execute();
         return $stmt;

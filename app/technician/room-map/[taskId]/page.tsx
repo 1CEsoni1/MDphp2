@@ -235,7 +235,7 @@ const generateEquipmentForRoom = (roomCode: string): Equipment[] => {
     LC204: { leftX: 15, rightX: 65, colSpacing: 5.5, topY: 30, rowSpacing: 10 },
   }
 
-  const อparams = roomGridParams[room] || roomGridParams['LC207']
+  const params = roomGridParams[room] || roomGridParams['LC207']
 
   return lc207Equipment.map((eq, idx) => {
     const newCode = eq.code.replace(/LC207/i, room)
@@ -284,6 +284,12 @@ export default function RoomMapPage() {
     type: "success" | "error" | "info"
     message: string
   }>({ show: false, type: "info", message: "" })
+  // guard rendering of dialog until after client mount to avoid mismatched hook/static flags
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
   // start with fallback equipment layout to ensure something always displays
   const [roomEquipment, setRoomEquipment] = useState<Equipment[]>(() => {
     // Generate basic layout for initial display
@@ -375,6 +381,39 @@ export default function RoomMapPage() {
     loadTask()
   }, [taskId, router])
 
+  // When the equipment dialog closes, refetch the single task to pick up any edits
+  useEffect(() => {
+    if (showEquipmentDialog) return
+    const refetch = async () => {
+      if (!taskId) return
+      try {
+        const res = await fetch('/api/repair-requests')
+        if (res.ok) {
+          const all = await res.json()
+          const found = all.find((r: any) => String(r.id) === String(taskId))
+          if (found) setTask(found)
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+    refetch()
+  }, [showEquipmentDialog, taskId])
+
+  const refetchTask = async () => {
+    if (!taskId) return
+    try {
+      const res = await fetch('/api/repair-requests')
+      if (res.ok) {
+        const all = await res.json()
+        const found = all.find((r: any) => String(r.id) === String(taskId))
+        if (found) setTask(found)
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+
   // compute whether current user is allowed to update the task status
   const canUpdate = (() => {
     if (!currentUser || !task) return false
@@ -382,9 +421,10 @@ export default function RoomMapPage() {
     if (auth.isAdmin()) return true
     const userName = currentUser.name
     // If assigned to this user, allow update
-    if (task.assignedTo === userName || task.assignedToName === userName) return true
-    // If not assigned yet, allow the reporting technician to start (if current user is technician)
-    if (!task.assignedTo && auth.isTechnician() && task.reporter === userName) return true
+    const userId = (currentUser as any).user_id || (currentUser as any).userId || (currentUser as any).id || userName
+    if (String(task.assignedTo) === String(userId) || task.assignedToName === userName) return true
+    // If not assigned yet, allow any technician to start (so admin-created tasks can be claimed)
+    if (!task.assignedTo && auth.isTechnician()) return true
     return false
   })()
 
@@ -577,6 +617,50 @@ export default function RoomMapPage() {
       })()
     }
     setShowEquipmentDialog(false)
+  }
+
+  // Claim this task for current user from the map view (similar to dashboard.assignToMe)
+  const assignToMeOnMap = async () => {
+    const user = auth.getCurrentUser()
+    if (!user || !task) {
+      router.push('/')
+      return
+    }
+    const userId = (user as any).user_id || (user as any).userId || user.id || user.name
+    // optimistic update
+    const prevTask = task
+    try {
+      setTask({ ...task, assignedTo: userId, status: 'assigned' })
+      const res = await fetch(`/api/repair-requests/${encodeURIComponent(String(task.id))}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignedTo: userId, status: 'assigned', changedBy: userId }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok && data.success) {
+        showNotification('success', 'รับงานเรียบร้อยแล้ว')
+        // refresh task info
+        try {
+          const getRes = await fetch('/api/repair-requests')
+          if (getRes.ok) {
+            const all = await getRes.json()
+            const found = all.find((r: any) => String(r.id) === String(task.id))
+            if (found) setTask(found)
+          }
+        } catch (e) {
+          // ignore
+        }
+        return true
+      }
+      // rollback
+      setTask(prevTask)
+      showNotification('error', data?.error || data?.message || 'ไม่สามารถรับงานได้')
+      return false
+    } catch (e) {
+      setTask(prevTask)
+      showNotification('error', 'เกิดข้อผิดพลาดขณะรับงาน')
+      return false
+    }
   }
 
   const getTablePosition = (equipment: Equipment) => {
@@ -959,13 +1043,23 @@ export default function RoomMapPage() {
                           <Button
                             size="sm"
                             className="w-full bg-red-600 hover:bg-red-700 shadow-md"
-                            onClick={() => {
-                              setSelectedEquipment(targetEquipment)
-                              setShowEquipmentDialog(true)
+                            onClick={async () => {
+                              // If task is already assigned, treat as 'บันทึกงาน' (open dialog to save)
+                              if (task?.assignedTo) {
+                                setSelectedEquipment(targetEquipment)
+                                setShowEquipmentDialog(true)
+                                return
+                              }
+                              // else, claim the task then open dialog
+                              const ok = await assignToMeOnMap()
+                              if (ok) {
+                                setSelectedEquipment(targetEquipment)
+                                setShowEquipmentDialog(true)
+                              }
                             }}
                           >
                             <CheckCircle className="w-4 h-4 mr-2" />
-                            เริ่มงานซ่อม
+                            {task?.assignedTo ? 'บันทึกงาน' : 'เริ่มงาน'}
                           </Button>
                         </div>
                       )}
@@ -1019,15 +1113,20 @@ export default function RoomMapPage() {
       </div>
 
       {/* Equipment Dialog */}
-      <EquipmentDialog
-        equipment={selectedEquipment}
-        isOpen={showEquipmentDialog}
-        onClose={() => setShowEquipmentDialog(false)}
-  onStatusUpdate={updateEquipmentStatus}
-        isTargetEquipment={selectedEquipment?.code === task?.equipmentCode}
-  taskStatus={task?.status}
-  canUpdate={canUpdate}
-      />
+      {mounted && (
+        <EquipmentDialog
+          equipment={selectedEquipment}
+          isOpen={showEquipmentDialog}
+          onClose={() => setShowEquipmentDialog(false)}
+          onStatusUpdate={updateEquipmentStatus}
+          isTargetEquipment={selectedEquipment?.code === task?.equipmentCode}
+          taskStatus={task?.status}
+          canUpdate={canUpdate}
+          taskId={task?.id}
+          assignedTo={task?.assignedTo}
+          onSaved={refetchTask}
+        />
+      )}
 
       <Notification
         type={notification.type}

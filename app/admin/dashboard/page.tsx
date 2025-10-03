@@ -68,6 +68,7 @@ export default function AdminDashboard() {
   const [editingRequest, setEditingRequest] = useState<RepairRequest | null>(null)
   const [showMobileFilters, setShowMobileFilters] = useState(false)
   const [currentUser, setCurrentUser] = useState<any>(null)
+  const [technicians, setTechnicians] = useState<{[key: string]: string}>({}) // Map of technician ID to name
   const [notification, setNotification] = useState<{
     show: boolean
     type: "success" | "error" | "info"
@@ -88,19 +89,41 @@ export default function AdminDashboard() {
       router.push("/");
       return;
     }
-    // ดึงข้อมูลจาก API
-    const fetchRequests = async () => {
-      try {
-        const res = await fetch("/api/repair-requests");
-        if (!res.ok) throw new Error("ไม่สามารถดึงข้อมูลงานซ่อมได้");
-        const allRequests = await res.json();
-        setRequests(allRequests);
-      } catch {
-        setRequests([]);
-      }
-    };
+    // ให้ useEffect เรียกฟังก์ชัน fetch ที่อยู่ภายนอก เพื่อให้สามารถเรียกซ้ำได้จากที่อื่น
     fetchRequests();
+    fetchTechnicians();
   }, [router]);
+
+  // ดึงข้อมูลจาก API (แยกเป็นฟังก์ชันให้อยู่ scope ของ component)
+  async function fetchRequests() {
+    try {
+      const res = await fetch("/api/repair-requests");
+      if (!res.ok) throw new Error("ไม่สามารถดึงข้อมูลงานซ่อมได้");
+      const allRequests = await res.json();
+      setRequests(allRequests);
+    } catch (e) {
+      console.error('fetchRequests error', e);
+      setRequests([]);
+    }
+  }
+
+  async function fetchTechnicians() {
+    try {
+      const res = await fetch("/api/users");
+      if (res.ok) {
+        const users = await res.json();
+        const techMap: {[key: string]: string} = {};
+        users.forEach((user: any) => {
+          if (user.type_id === "02") { // เฉพาะช่างเทคนิค
+            techMap[user.user_id] = user.name;
+          }
+        });
+        setTechnicians(techMap);
+      }
+    } catch (error) {
+      console.error("ไม่สามารถดึงข้อมูลช่างได้:", error);
+    }
+  }
 
   const showNotification = (type: "success" | "error" | "info", message: string) => {
     setNotification({ show: true, type, message })
@@ -112,6 +135,13 @@ export default function AdminDashboard() {
     setTimeout(() => {
       router.push("/");
     }, 1500);
+  }
+
+  // ฟังก์ชันแสดงชื่อช่างจาก ID
+  const getTechnicianName = (assignedTo: string | undefined) => {
+    if (!assignedTo) return "-";
+    const name = technicians[assignedTo];
+    return name ? name : `ID: ${assignedTo}`;
   }
 
   const getStatusBadge = (status: string | undefined) => {
@@ -176,10 +206,20 @@ export default function AdminDashboard() {
 
   const filteredRequests = requests.filter((request) => {
     const q = searchTerm.toLowerCase()
+    
+    // ค้นหาตามชื่อช่าง (ID และชื่อ)
+    const technicianName = technicians[request.assignedTo || ""] || ""
+    const technicianMatch = 
+      (request.assignedTo || "").toLowerCase().includes(q) || // ค้นหาตาม ID
+      technicianName.toLowerCase().includes(q) // ค้นหาตามชื่อ
+    
     const matchesSearch =
       (request.equipmentName || "").toLowerCase().includes(q) ||
       (request.equipmentCode || "").toLowerCase().includes(q) ||
-      (request.reporter || "").toLowerCase().includes(q)
+      (request.reporter || "").toLowerCase().includes(q) ||
+      ((request.location?.building || "") + " " + (request.location?.room || "")).toLowerCase().includes(q) ||
+      technicianMatch
+      
     const matchesStatus = statusFilter === "all" || (request.status || "") === statusFilter
     return matchesSearch && matchesStatus
   })
@@ -529,11 +569,12 @@ export default function AdminDashboard() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
               <Input
-                placeholder="ค้นหาครุภัณฑ์ รหัส หรือผู้แจ้ง..."
+                placeholder="ค้นหาครุภัณฑ์ รหัส ผู้แจ้ง หรือชื่อช่าง..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10 bg-white/95 backdrop-blur-sm border-gray-200"
               />
+  
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-full sm:w-48 bg-white/95 backdrop-blur-sm border-gray-200">
@@ -563,13 +604,12 @@ export default function AdminDashboard() {
                 </DialogHeader>
                 <AddRepairForm
                   onClose={() => setShowAddForm(false)}
-                  onSuccess={() => {
-                    // refresh from persisted storage
+                  onSuccess={async () => {
+                    // Refresh list from server so new item appears immediately
                     try {
-                      const s = localStorage.getItem("requests")
-                      setRequests(s ? JSON.parse(s) : requests)
-                    } catch {
-                      /* ignore */
+                      await fetchRequests()
+                    } catch (e) {
+                      console.warn('refresh after create failed', e)
                     }
                     showNotification("success", "เพิ่มรายการสำเร็จ")
                   }}
@@ -635,7 +675,11 @@ export default function AdminDashboard() {
                       <TableCell>{getPriorityBadge(request.priority)}</TableCell>
                       <TableCell>{getStatusBadge(request.status)}</TableCell>
                       <TableCell className="hidden xl:table-cell text-xs sm:text-sm">
-                        {request.assignedTo || "-"}
+                        <div className="flex flex-col">
+                          <span className="font-medium">
+                            {request.assignedTo ? getTechnicianName(request.assignedTo) : "-"}
+                          </span>
+                        </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-1 sm:gap-2">
@@ -710,7 +754,6 @@ function AddRepairForm({ onClose, onSuccess }: { onClose: () => void; onSuccess:
     description: "",
     priority: "medium" as "low" | "medium" | "high",
     reporter: "",
-    assignedTo: "",
   })
 
   const handleSubmit = () => {
@@ -718,33 +761,39 @@ function AddRepairForm({ onClose, onSuccess }: { onClose: () => void; onSuccess:
       alert("กรุณากรอกข้อมูลที่จำเป็น")
       return
     }
+    ;(async () => {
+      try {
+        const payload = {
+          equipment_code: formData.equipmentCode,
+          equipment_name: formData.equipmentName,
+          building: formData.building,
+          floor: formData.floor,
+          room: formData.room,
+          description: formData.description,
+          priority: formData.priority,
+          reporter: formData.reporter,
+          status: 'pending',
+        }
 
-    const newRequest: RepairRequest = {
-      id: Math.random().toString(36).slice(2, 9),
-      equipmentName: formData.equipmentName,
-      equipmentCode: formData.equipmentCode,
-      location: {
-        building: formData.building,
-        floor: formData.floor,
-        room: formData.room,
-      },
-      description: formData.description,
-      priority: formData.priority,
-      reporter: formData.reporter,
-      assignedTo: formData.assignedTo || undefined,
-      status: formData.assignedTo ? "assigned" : "pending",
-      reportDate: new Date().toISOString().split("T")[0],
-    }
+        const res = await fetch('/api/repair-requests', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
 
-    // persist to localStorage fallback
-    try {
-      const cur = localStorage.getItem("requests")
-      const arr = cur ? JSON.parse(cur) : []
-      arr.unshift(newRequest)
-      localStorage.setItem("requests", JSON.stringify(arr))
-    } catch {}
-    onSuccess()
-    onClose()
+        const json = await res.json()
+        if (res.ok && json.success) {
+          // แจ้งความสำเร็จให้ parent ดูแลการรีเฟรช (onSuccess จะเรียก fetchRequests)
+          onSuccess()
+          onClose()
+        } else {
+          alert(json.message || 'ไม่สามารถสร้างรายการแจ้งซ่อมได้')
+        }
+      } catch (e) {
+        console.error('create repair error', e)
+        alert('เกิดข้อผิดพลาดในการบันทึกข้อมูล')
+      }
+    })()
   }
 
   return (
@@ -838,22 +887,7 @@ function AddRepairForm({ onClose, onSuccess }: { onClose: () => void; onSuccess:
             onChange={(e) => setFormData({ ...formData, reporter: e.target.value })}
           />
         </div>
-        <div>
-          <Label htmlFor="assignTo">มอบหมายให้ช่าง</Label>
-          <Select
-            value={formData.assignedTo}
-            onValueChange={(value) => setFormData({ ...formData, assignedTo: value })}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="เลือกช่าง" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">ไม่มอบหมาย</SelectItem>
-              <SelectItem value="ช่างสมชาย">ช่างสมชาย</SelectItem>
-              <SelectItem value="ช่างสมหญิง">ช่างสมหญิง</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        {/* assignedTo removed - auto assignment by room */}
       </div>
 
       <div className="flex flex-col sm:flex-row justify-end gap-2 pt-4">
@@ -960,3 +994,7 @@ function ViewRequestDialog({
     </div>
   )
 }
+function fetchRequests() {
+  throw new Error("Function not implemented.")
+}
+

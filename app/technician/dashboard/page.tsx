@@ -78,6 +78,34 @@ export default function TechnicianDashboard() {
     setIsClient(true);
   }, []);
 
+  // Listen for external updates (e.g., map page saved a repair) and refresh tasks
+  useEffect(() => {
+    const handler = (e: Event) => {
+      try {
+        // best-effort refresh
+        fetchTasks()
+      } catch (err) {
+        // ignore
+      }
+    }
+    window.addEventListener('repairRequestUpdated', handler as EventListener)
+    // also listen to storage events for cross-tab broadcasts
+    const storageHandler = (ev: StorageEvent) => {
+      if (ev.key === 'repairRequestUpdated') {
+        try {
+          fetchTasks()
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+    window.addEventListener('storage', storageHandler)
+    return () => {
+      window.removeEventListener('repairRequestUpdated', handler as EventListener)
+      window.removeEventListener('storage', storageHandler)
+    }
+  }, [])
+
   // Reusable fetch function so mobile menu and other UI can refresh live data
   const fetchTasks = async () => {
     try {
@@ -91,13 +119,37 @@ export default function TechnicianDashboard() {
       }
       const myRoomRequests = await res.json();
       setTasks(myRoomRequests);
+      return myRoomRequests;
     } catch (e) {
       console.error('Failed to fetch room-specific tasks:', e);
       // Show error notification
       setNotification({ show: true, type: 'error', message: 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์เพื่อดึงข้อมูลงานซ่อม' });
       setTasks([]);
+      return [];
     }
   };
+
+  // fetch a single task by id and update local tasks/selectedTask
+  const fetchTaskById = async (id: string) => {
+    try {
+      const res = await fetch(`/api/repair-requests`)
+      if (!res.ok) throw new Error('fetch failed')
+      const all = await res.json()
+      const found = all.find((r: any) => String(r.id) === String(id)) || null
+      // update tasks list item if present
+      if (found) {
+        setTasks((prev) => prev.map((t) => (String(t.id) === String(id) ? found : t)))
+      }
+      // update selected task if it's the one
+      if (selectedTask && String(selectedTask.id) === String(id)) {
+        setSelectedTask(found)
+      }
+      return found
+    } catch (e) {
+      console.error('fetchTaskById error', e)
+      return null
+    }
+  }
 
   useEffect(() => {
     if (!isMounted || !isClient) return;
@@ -173,27 +225,31 @@ export default function TechnicianDashboard() {
     switch (priority) {
       case "high":
         return (
-          <div className="flex items-center gap-1">
-            <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-            <span className="text-xs text-red-700 font-medium">สูง</span>
-          </div>
+          <Badge variant="secondary" className="bg-red-100 text-red-800 border-red-200 text-xs font-semibold">
+            <AlertTriangle className="w-3 h-3 mr-1" />
+            high
+          </Badge>
         );
       case "medium":
         return (
-          <div className="flex items-center gap-1">
-            <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-            <span className="text-xs text-yellow-700 font-medium">ปานกลาง</span>
-          </div>
+          <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 border-yellow-200 text-xs font-medium">
+            <Clock className="w-3 h-3 mr-1" />
+            medium
+          </Badge>
         );
       case "low":
         return (
-          <div className="flex items-center gap-1">
-            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-            <span className="text-xs text-green-700 font-medium">ต่ำ</span>
-          </div>
+          <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200 text-xs">
+            <CheckCircle className="w-3 h-3 mr-1" />
+            low
+          </Badge>
         );
       default:
-        return <span className="text-xs text-gray-500">ไม่ระบุ</span>;
+        return (
+          <Badge variant="secondary" className="bg-gray-100 text-gray-600 border-gray-200 text-xs">
+            ไม่ระบุ
+          </Badge>
+        );
     }
   }
 
@@ -224,17 +280,13 @@ export default function TechnicianDashboard() {
         body: JSON.stringify(payload),
       });
       const data = await res.json();
-      if (res.ok && data.success) {
+        if (res.ok && data.success) {
         showNotification('success', 'อัปเดตสถานะสำเร็จ');
-        // refresh selectedTask immediately so UI (images area) updates
+        // refresh technician-scoped tasks and update selectedTask
         try {
-          const resp = await fetch(`/api/repair-requests`);
-          if (resp.ok) {
-            const allRequests = await resp.json();
-            setTasks(allRequests);
-            const updated = allRequests.find((r: any) => String(r.id) === String(taskId)) || null;
-            setSelectedTask(updated);
-          }
+          const refreshed = await fetchTasks();
+          const updated = refreshed.find((r: any) => String(r.id) === String(taskId)) || null;
+          setSelectedTask(updated);
         } catch (e) {
           // ignore
         }
@@ -247,16 +299,11 @@ export default function TechnicianDashboard() {
       showNotification('error', 'เกิดข้อผิดพลาดในการอัปเดตสถานะ');
     }
 
-    // Refresh tasks from server (best effort)
+    // Refresh technician-scoped tasks from server (best effort)
     try {
-      const resp = await fetch('/api/repair-requests');
-      if (resp.ok) {
-        const allRequests = await resp.json();
-        // Keep full list so UI remains consistent after status update
-        setTasks(allRequests);
-      }
+      await fetchTasks();
     } catch (e) {
-      // fallback: keep existing tasks
+      // ignore
     }
   }
 
@@ -293,7 +340,7 @@ export default function TechnicianDashboard() {
       if (res.ok && data.success) {
         showNotification('success', 'รับงานเรียบร้อยแล้ว')
         // Refresh tasks from my-rooms API
-        fetchTasks()
+        await fetchTasks()
   } else {
         // rollback optimistic change
         setTasks(prevTasks)
@@ -318,6 +365,21 @@ export default function TechnicianDashboard() {
         .includes(q)
     const matchesStatus = statusFilter === "all" || (task.status || "") === statusFilter
     return matchesSearch && matchesStatus
+  }).sort((a, b) => {
+    // Define priority order: high > medium > low
+    const priorityOrder = { high: 3, medium: 2, low: 1 }
+    const aPriority = priorityOrder[a.priority as keyof typeof priorityOrder] || 0
+    const bPriority = priorityOrder[b.priority as keyof typeof priorityOrder] || 0
+    
+    // Sort by priority (descending - high first)
+    if (aPriority !== bPriority) {
+      return bPriority - aPriority
+    }
+    
+    // If same priority, sort by report date (newest first)
+    const aDate = new Date(a.reportDate || '1970-01-01').getTime()
+    const bDate = new Date(b.reportDate || '1970-01-01').getTime()
+    return bDate - aDate
   })
 
   const stats = {
@@ -326,6 +388,10 @@ export default function TechnicianDashboard() {
     assigned: tasks.filter((t) => t.status === "assigned").length,
     inProgress: tasks.filter((t) => t.status === "in-progress").length,
     completed: tasks.filter((t) => t.status === "completed").length,
+    // Priority stats
+    high: tasks.filter((t) => t.priority === "high").length,
+    medium: tasks.filter((t) => t.priority === "medium").length,
+    low: tasks.filter((t) => t.priority === "low").length,
   }
 
   // Enhanced Mobile Filters Component
@@ -377,7 +443,7 @@ export default function TechnicianDashboard() {
                     <Button size="sm" variant="outline" onClick={() => { setShowMobileFilters(false); router.push(`/technician/room-map/${t.id}`); }}>
                       ดู
                     </Button>
-                    {!t.assignedTo && (
+                    {!t.assignedTo && t.status !== 'completed' && (
                       <Button size="sm" variant="blue" onClick={() => assignToMe(t.id)}>
                         รับ
                       </Button>
@@ -420,6 +486,28 @@ export default function TechnicianDashboard() {
             <span className="text-sm font-medium text-green-800">เสร็จสิ้น</span>
           </div>
           <p className="text-xl font-bold text-green-900">{stats.completed}</p>
+        </div>
+      </div>
+
+      {/* Priority Stats */}
+      <div className="p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-lg border border-gray-200">
+        <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+          <BarChart3 className="w-4 h-4" />
+          ลำดับความสำคัญ
+        </h4>
+        <div className="grid grid-cols-3 gap-2">
+          <div className="text-center p-2 bg-red-50 rounded border border-red-200">
+            <div className="text-lg font-bold text-red-700">{stats.high}</div>
+            <div className="text-xs text-red-600">ด่วนมาก</div>
+          </div>
+          <div className="text-center p-2 bg-yellow-50 rounded border border-yellow-200">
+            <div className="text-lg font-bold text-yellow-700">{stats.medium}</div>
+            <div className="text-xs text-yellow-600">ปานกลาง</div>
+          </div>
+          <div className="text-center p-2 bg-green-50 rounded border border-green-200">
+            <div className="text-lg font-bold text-green-700">{stats.low}</div>
+            <div className="text-xs text-green-600">ไม่ด่วน</div>
+          </div>
         </div>
       </div>
 
@@ -654,7 +742,8 @@ export default function TechnicianDashboard() {
                           task={selectedTask}
                           onUpdateStatus={updateTaskStatus}
                           currentUser={currentUser}
-                            onAssignToMe={assignToMe}
+                          onAssignToMe={assignToMe}
+                          fetchTaskById={fetchTaskById}
                         />
                       )}
                     </DialogContent>
@@ -684,7 +773,7 @@ export default function TechnicianDashboard() {
                     )
                   )}
                   {/* If task is pending (no assignedTo), allow claiming */}
-                  {!task.assignedTo && (
+                  {!task.assignedTo && task.status !== 'completed' && (
                     <Button size="sm" variant="outline" onClick={() => assignToMe(task.id)}>รับงาน</Button>
                   )}
                 </div>
@@ -721,11 +810,13 @@ function TaskDetailModal({
   onUpdateStatus,
   currentUser,
   onAssignToMe,
+  fetchTaskById,
 }: {
   task: RepairRequest
   onUpdateStatus: (taskId: string, status: RepairRequest["status"], notes?: string, files?: { name: string; data: string }[]) => void
   currentUser: any
   onAssignToMe?: (taskId: string) => void
+  fetchTaskById?: (id: string) => Promise<any>
 }) {
   const router = useRouter()
   const [notes, setNotes] = useState("")
@@ -735,6 +826,13 @@ function TaskDetailModal({
     const files = Array.from(event.target.files || [])
     setSelectedFiles(files)
   }
+
+  useEffect(() => {
+    // refresh the task data when modal is opened so we show latest notes/status
+    if (fetchTaskById && task && task.id) {
+      fetchTaskById(String(task.id)).catch(() => {})
+    }
+  }, [fetchTaskById, task?.id])
 
   const handleStatusUpdate = (status: RepairRequest["status"]) => {
     // convert selectedFiles to base64 payloads if any
@@ -771,17 +869,22 @@ function TaskDetailModal({
 
   return (
     <div className="flex flex-col h-full max-h-[95vh] font-sans">
+      {/* Radix Dialog requires a DialogTitle somewhere inside DialogContent for accessibility.
+          We keep the visible header as-is but provide a visually-hidden DialogTitle to satisfy
+          screen readers. */}
+      <DialogTitle className="sr-only">รายละเอียดงานซ่อม #{task.id}</DialogTitle>
       {/* Header */}
       <div className="flex items-center justify-between p-6 pb-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-t-2xl">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
-            <Wrench className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <DialogTitle className="text-xl font-bold text-gray-900">รายละเอียดงานซ่อม #{task.id}</DialogTitle>
-            <DialogDescription className="text-sm text-gray-600">ข้อมูลครุภัณฑ์และการซ่อมบำรุง</DialogDescription>
+        <div className="flex items-center gap-4">
+          {onAssignToMe && task.status !== 'completed' && (
+            <Button size="sm" variant="outline" onClick={() => onAssignToMe(task.id)}>รับงาน</Button>
+          )}
+          <div className="text-left">
+            <h3 className="text-xl font-bold text-gray-900">รายละเอียดงานซ่อม #{task.id}</h3>
+            <p className="text-sm text-gray-600">ข้อมูลครุภัณฑ์และการซ่อมบำรุง</p>
           </div>
         </div>
+        <div />
       </div>
 
       {/* Content */}
