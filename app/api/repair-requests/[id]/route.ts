@@ -79,22 +79,26 @@ export async function PATCH(req: Request, { params }: any) {
 			const ctxParams = await params;
 			// Normalise fields (formidable may return arrays for each field)
 			const rawStatus = body.status;
+			const rawDescription = body.description;
 			const rawEquipmentName = body.equipment_name || body.equipmentName || body.equipmentName || body.equipmentName;
 			const rawEquipmentCode = body.equipment_code || body.equipmentCode || body.code;
 			const rawBuilding = body.building;
 			const rawFloor = body.floor;
 			const rawRoom = body.room;
 			const rawReporter = body.reporter;
+			const rawPriority = body.priority;
 			const rawAssignedTo = body.assignedTo;
 			const rawNotes = body.notes;
 			const rawChangedBy = body.changedBy;
 			const status = Array.isArray(rawStatus) ? rawStatus[0] : rawStatus;
+			const description = Array.isArray(rawDescription) ? rawDescription[0] : rawDescription;
 			const equipmentName = Array.isArray(rawEquipmentName) ? rawEquipmentName[0] : rawEquipmentName;
 			const equipmentCode = Array.isArray(rawEquipmentCode) ? rawEquipmentCode[0] : rawEquipmentCode;
 			const building = Array.isArray(rawBuilding) ? rawBuilding[0] : rawBuilding;
 			const floor = Array.isArray(rawFloor) ? rawFloor[0] : rawFloor;
 			const room = Array.isArray(rawRoom) ? rawRoom[0] : rawRoom;
 			const reporter = Array.isArray(rawReporter) ? rawReporter[0] : rawReporter;
+			const priority = Array.isArray(rawPriority) ? rawPriority[0] : rawPriority;
 			let assignedTo = Array.isArray(rawAssignedTo) ? rawAssignedTo[0] : rawAssignedTo;
 			const notes = Array.isArray(rawNotes) ? rawNotes[0] : rawNotes;
 			const changedBy = Array.isArray(rawChangedBy) ? rawChangedBy[0] : rawChangedBy;
@@ -152,6 +156,15 @@ export async function PATCH(req: Request, { params }: any) {
 					updateParts.push('equipment_name = ?');
 					updateParams.push(equipmentName);
 				}
+				// allow updating description and priority
+				if (description !== undefined) {
+					updateParts.push('description = ?');
+					updateParams.push(description);
+				}
+				if (priority !== undefined) {
+					updateParts.push('priority = ?');
+					updateParams.push(priority);
+				}
 				if (equipmentCode !== undefined) {
 					updateParts.push('equipment_code = ?');
 					updateParams.push(equipmentCode);
@@ -184,7 +197,9 @@ export async function PATCH(req: Request, { params }: any) {
 
 				const updateSql = `UPDATE tb_repair_requests SET ${updateParts.join(', ')} WHERE id = ?`;
 				updateParams.push(ctxParams.id);
-
+				// debug: show generated SQL and params so we can verify what's being updated
+				console.log('[PATCH] updateSql:', updateSql)
+				console.log('[PATCH] updateParams:', updateParams)
 				await conn.execute(updateSql, updateParams);
 
 				// Sync equipment status: if status is completed -> set equipment to working, otherwise mark as repair

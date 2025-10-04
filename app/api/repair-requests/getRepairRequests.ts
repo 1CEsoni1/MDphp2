@@ -22,7 +22,7 @@ export async function GET(req: Request) {
        LEFT JOIN tb_room r ON rr.room = r.code
        LEFT JOIN tb_users ru ON r.assigned_technician = ru.id
        GROUP BY rr.id
-       ORDER BY rr.report_date DESC`
+       ORDER BY rr.created_at DESC`
     );
 
     await conn.end();

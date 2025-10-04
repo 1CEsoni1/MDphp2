@@ -968,6 +968,7 @@ function EditRequestDialog({
   if (room !== undefined) payload.room = room
   if (reporter !== undefined) payload.reporter = reporter
 
+      console.debug('[EditRequestDialog] PATCH payload:', payload)
       const res = await fetch(`/api/repair-requests/${encodeURIComponent(String(request.id))}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -980,7 +981,18 @@ function EditRequestDialog({
           try { localStorage.setItem('repairRequestUpdated', JSON.stringify({ id: request.id, status, ts: Date.now() })) } catch (e) {}
           setTimeout(() => { try { localStorage.removeItem('repairRequestUpdated') } catch (e) {} }, 1000)
         } catch (e) {}
-        onSaved()
+        // ensure parent refresh completes before closing the dialog to avoid stale UI
+        try {
+          if (onSaved) {
+            const maybePromise = onSaved()
+            // only await if it's a Promise-like object with a then function
+            if (maybePromise !== undefined && maybePromise !== null && typeof (maybePromise as any).then === 'function') {
+              await (maybePromise as any)
+            }
+          }
+        } catch (e) {
+          console.warn('[EditRequestDialog] onSaved handler failed', e)
+        }
         onClose()
       } else {
         alert(json?.message || json?.error || 'ไม่สามารถบันทึกการเปลี่ยนแปลงได้')

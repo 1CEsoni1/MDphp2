@@ -10,14 +10,14 @@ export async function GET(req: Request) {
 			database: process.env.DB_NAME || "equipment_repair",
 		});
 
-		const [rows]: any = await conn.execute(
-			`SELECT rr.id, rr.equipment_code, rr.equipment_name, rr.building, rr.floor, rr.room,
-							rr.status, rr.description, rr.reporter, rr.assigned_to, u.name as assigned_to_name,
-							rr.priority, rr.report_date, rr.assigned_date, rr.completed_date, rr.images, rr.notes
-			 FROM tb_repair_requests rr
-			 LEFT JOIN tb_users u ON rr.assigned_to = u.id
-			 ORDER BY rr.report_date DESC`
-		);
+			const [rows]: any = await conn.execute(
+				`SELECT rr.id, rr.equipment_code, rr.equipment_name, rr.building, rr.floor, rr.room,
+								rr.status, rr.description, rr.reporter, rr.assigned_to, u.name as assigned_to_name,
+								rr.priority, rr.report_date, rr.assigned_date, rr.completed_date, rr.images, rr.notes
+				 FROM tb_repair_requests rr
+				 LEFT JOIN tb_users u ON rr.assigned_to = u.id
+				 ORDER BY rr.created_at DESC`
+			);
 
 		await conn.end();
 
