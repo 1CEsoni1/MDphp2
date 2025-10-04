@@ -20,7 +20,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import {
-  Bell,
   Calendar,
   Edit,
   Eye,
@@ -58,6 +57,7 @@ type RepairRequest = {
   [k: string]: any
 }
 import { Notification } from "@/components/notification"
+import AddRepairForm from "@/components/admin/AddRepairForm"
 
 export default function AdminDashboard() {
   const router = useRouter()
@@ -231,13 +231,57 @@ export default function AdminDashboard() {
     completed: requests.filter((r) => r.status === "completed").length,
   }
 
-  const handleDeleteRequest = (id: string) => {
-    if (confirm("คุณต้องการลบรายการนี้หรือไม่?")) {
-      // localStorage fallback: remove and persist
-      const cur = requests.filter((r) => r.id !== id)
-      setRequests(cur)
-      try { localStorage.setItem("requests", JSON.stringify(cur)) } catch {}
-      showNotification("success", "ลบรายการสำเร็จ")
+  const handleDeleteRequest = async (id: string) => {
+    if (!confirm("คุณต้องการลบรายการนี้หรือไม่?")) return;
+    try {
+      const headers: any = {};
+      // Prefer currentUser from state, fallback to localStorage 'user' payload if needed
+      let userId: string | null = null;
+      if (currentUser && (currentUser.user_id || currentUser.userId || currentUser.id)) {
+        userId = currentUser.user_id || currentUser.userId || currentUser.id;
+      } else if (typeof window !== 'undefined') {
+        try {
+          const raw = localStorage.getItem('user');
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            userId = parsed?.user_id || parsed?.userId || parsed?.id || null;
+          }
+        } catch (e) {
+          console.warn('failed to parse localStorage.user', e);
+        }
+      }
+      if (userId) headers['x-user-id'] = String(userId);
+
+      const res = await fetch(`/api/repair-requests/${id}`, { method: 'DELETE', headers });
+      let json: any = null;
+      try { json = await res.json(); } catch (e) { /* ignore parse error */ }
+
+      if (!res.ok || (json && json.success === false)) {
+        console.error('delete failed', { status: res.status, body: json });
+        const msg = (json && (json.message || json.error)) ? (json.message || json.error) : 'ไม่สามารถลบรายการได้';
+        showNotification('error', msg);
+        return;
+      }
+
+      // Refresh from server
+      try { await fetchRequests(); } catch (e) { console.warn('refresh after delete failed', e); }
+
+      // notify other windows/components
+      try {
+        if (typeof window !== 'undefined') {
+          try { localStorage.setItem('repairRequestUpdated', String(Date.now())); } catch {}
+          window.dispatchEvent(new CustomEvent('repairRequestUpdated'));
+          try { localStorage.removeItem('repairRequestUpdated'); } catch {}
+        }
+      } catch (e) {
+        console.warn('failed to dispatch repairRequestUpdated event', e);
+      }
+
+      const successMsg = (json && json.message) ? json.message : 'ลบรายการสำเร็จ';
+      showNotification('success', successMsg);
+    } catch (e) {
+      console.error('delete error', e);
+      showNotification('error', 'เกิดข้อผิดพลาดขณะลบรายการ');
     }
   }
 
@@ -494,14 +538,6 @@ export default function AdminDashboard() {
               </div>
             </div>
             <div className="flex items-center gap-2 sm:gap-4">
-              <Button variant="ghost" size="sm" className="relative">
-                <Bell className="w-4 h-4" />
-                {stats.pending > 0 && (
-                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
-                    {stats.pending}
-                  </span>
-                )}
-              </Button>
               <div className="hidden sm:flex items-center gap-2">
                 <User className="w-4 h-4" />
                 <span className="text-sm">{currentUser?.name}</span>
@@ -605,7 +641,6 @@ export default function AdminDashboard() {
                 <AddRepairForm
                   onClose={() => setShowAddForm(false)}
                   onSuccess={async () => {
-                    // Refresh list from server so new item appears immediately
                     try {
                       await fetchRequests()
                     } catch (e) {
@@ -740,172 +775,29 @@ export default function AdminDashboard() {
         show={notification.show}
         onClose={() => setNotification({ ...notification, show: false })}
       />
+      {editingRequest && (
+        <Dialog open={!!editingRequest} onOpenChange={(open) => { if (!open) setEditingRequest(null) }}>
+          <DialogContent className="max-w-2xl mx-4 sm:mx-auto max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>แก้ไขรายการแจ้งซ่อม #{editingRequest.id}</DialogTitle>
+            </DialogHeader>
+            <EditRequestDialog
+              request={editingRequest}
+              onClose={() => setEditingRequest(null)}
+              onSaved={async () => { await fetchRequests(); showNotification('success', 'บันทึกการแก้ไขสำเร็จ') }}
+              technicians={technicians}
+              currentUser={currentUser}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   )
 }
 
-function AddRepairForm({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
-  const [formData, setFormData] = useState({
-    equipmentName: "",
-    equipmentCode: "",
-    building: "",
-    floor: "",
-    room: "",
-    description: "",
-    priority: "medium" as "low" | "medium" | "high",
-    reporter: "",
-  })
+    // Using shared AddRepairForm from components/admin/AddRepairForm.tsx
 
-  const handleSubmit = () => {
-    if (!formData.equipmentName || !formData.equipmentCode || !formData.description || !formData.reporter) {
-      alert("กรุณากรอกข้อมูลที่จำเป็น")
-      return
-    }
-    ;(async () => {
-      try {
-        const payload = {
-          equipment_code: formData.equipmentCode,
-          equipment_name: formData.equipmentName,
-          building: formData.building,
-          floor: formData.floor,
-          room: formData.room,
-          description: formData.description,
-          priority: formData.priority,
-          reporter: formData.reporter,
-          status: 'pending',
-        }
-
-        const res = await fetch('/api/repair-requests', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        })
-
-        const json = await res.json()
-        if (res.ok && json.success) {
-          // แจ้งความสำเร็จให้ parent ดูแลการรีเฟรช (onSuccess จะเรียก fetchRequests)
-          onSuccess()
-          onClose()
-        } else {
-          alert(json.message || 'ไม่สามารถสร้างรายการแจ้งซ่อมได้')
-        }
-      } catch (e) {
-        console.error('create repair error', e)
-        alert('เกิดข้อผิดพลาดในการบันทึกข้อมูล')
-      }
-    })()
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
-          <Label htmlFor="equipmentName">ชื่อครุภัณฑ์ *</Label>
-          <Input
-            id="equipmentName"
-            placeholder="เช่น เครื่องปรับอากาศ"
-            value={formData.equipmentName}
-            onChange={(e) => setFormData({ ...formData, equipmentName: e.target.value })}
-          />
-        </div>
-        <div>
-          <Label htmlFor="equipmentCode">รหัสครุภัณฑ์ *</Label>
-          <Input
-            id="equipmentCode"
-            placeholder="เช่น EQ-001"
-            value={formData.equipmentCode}
-            onChange={(e) => setFormData({ ...formData, equipmentCode: e.target.value })}
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div>
-          <Label htmlFor="building">อาคาร</Label>
-          <Input
-            id="building"
-            placeholder="เช่น ตึก LC"
-            value={formData.building}
-            onChange={(e) => setFormData({ ...formData, building: e.target.value })}
-          />
-        </div>
-        <div>
-          <Label htmlFor="floor">ชั้น</Label>
-          <Input
-            id="floor"
-            placeholder="เช่น ชั้น 2"
-            value={formData.floor}
-            onChange={(e) => setFormData({ ...formData, floor: e.target.value })}
-          />
-        </div>
-        <div>
-          <Label htmlFor="room">ห้อง</Label>
-          <Input
-            id="room"
-            placeholder="เช่น LC207"
-            value={formData.room}
-            onChange={(e) => setFormData({ ...formData, room: e.target.value })}
-          />
-        </div>
-      </div>
-
-      <div>
-        <Label htmlFor="description">รายละเอียดปัญหา *</Label>
-        <Textarea
-          id="description"
-          placeholder="อธิบายปัญหาที่พบ..."
-          value={formData.description}
-          onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-          rows={3}
-          className="resize-none"
-        />
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div>
-          <Label htmlFor="priority">ความสำคัญ</Label>
-          <Select
-            value={formData.priority}
-            onValueChange={(value: "low" | "medium" | "high") => setFormData({ ...formData, priority: value })}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="high">สูง</SelectItem>
-              <SelectItem value="medium">ปานกลาง</SelectItem>
-              <SelectItem value="low">ต่ำ</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label htmlFor="reporter">ผู้แจ้ง *</Label>
-          <Input
-            id="reporter"
-            placeholder="ชื่อผู้แจ้ง"
-            value={formData.reporter}
-            onChange={(e) => setFormData({ ...formData, reporter: e.target.value })}
-          />
-        </div>
-        {/* assignedTo removed - auto assignment by room */}
-      </div>
-
-      <div className="flex flex-col sm:flex-row justify-end gap-2 pt-4">
-        <Button variant="outline" onClick={onClose} className="order-2 sm:order-1 bg-transparent">
-          ยกเลิก
-        </Button>
-        <Button
-          className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 order-1 sm:order-2"
-          onClick={handleSubmit}
-        >
-          บันทึก
-        </Button>
-      </div>
-    </div>
-  )
-}
-
-function ViewRequestDialog({
+    function ViewRequestDialog({
   request,
   onUpdateStatus,
   technicians,
@@ -999,9 +891,6 @@ function ViewRequestDialog({
             ))}
           </SelectContent>
         </Select>
-        <p className="text-xs text-gray-500 mt-1">
-          ช่างที่ประจำห้อง: {request.roomAssignedTechnicianName || request.roomAssignedTechnician || 'ยังไม่มี'}
-        </p>
       </div>
 
       <div>
@@ -1037,7 +926,148 @@ function ViewRequestDialog({
     </div>
   )
 }
-function fetchRequests() {
-  throw new Error("Function not implemented.")
+
+// Edit dialog component for admins to modify a repair request
+function EditRequestDialog({
+  request,
+  onClose,
+  onSaved,
+  technicians,
+  currentUser,
+}: {
+  request: RepairRequest
+  onClose: () => void
+  onSaved: () => void
+  technicians: { [key: string]: string }
+  currentUser: any
+}) {
+  const [description, setDescription] = useState(request.description || "")
+  const [priority, setPriority] = useState<"low" | "medium" | "high">((request.priority as any) || "medium")
+  const [assignedTo, setAssignedTo] = useState<string>(request.assignedTo || "none")
+  const [status, setStatus] = useState<string>(request.status || "pending")
+  const [saving, setSaving] = useState(false)
+  const [equipmentName, setEquipmentName] = useState<string>(request.equipmentName || "")
+  const [equipmentCode, setEquipmentCode] = useState<string>(request.equipmentCode || "")
+  const [building, setBuilding] = useState<string>((request.location && request.location.building) || "")
+  const [floor, setFloor] = useState<string>((request.location && request.location.floor) || "")
+  const [room, setRoom] = useState<string>((request.location && request.location.room) || "")
+  const [reporter, setReporter] = useState<string>(request.reporter || "")
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+  const payload: any = { description, priority, status }
+      if (assignedTo && assignedTo !== "none") payload.assignedTo = assignedTo
+      const changedBy = currentUser?.user_id || currentUser?.userId || currentUser?.id || currentUser?.name || null
+      if (changedBy) payload.changedBy = changedBy
+  // include editable equipment/location fields
+  if (equipmentName !== undefined) payload.equipment_name = equipmentName
+  if (equipmentCode !== undefined) payload.equipment_code = equipmentCode
+  if (building !== undefined) payload.building = building
+  if (floor !== undefined) payload.floor = floor
+  if (room !== undefined) payload.room = room
+  if (reporter !== undefined) payload.reporter = reporter
+
+      const res = await fetch(`/api/repair-requests/${encodeURIComponent(String(request.id))}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const json = await res.json().catch(() => null)
+      if (res.ok) {
+        try {
+          window.dispatchEvent(new CustomEvent('repairRequestUpdated', { detail: { id: request.id, status } }))
+          try { localStorage.setItem('repairRequestUpdated', JSON.stringify({ id: request.id, status, ts: Date.now() })) } catch (e) {}
+          setTimeout(() => { try { localStorage.removeItem('repairRequestUpdated') } catch (e) {} }, 1000)
+        } catch (e) {}
+        onSaved()
+        onClose()
+      } else {
+        alert(json?.message || json?.error || 'ไม่สามารถบันทึกการเปลี่ยนแปลงได้')
+      }
+    } catch (e) {
+      console.error('save edit error', e)
+      alert('เกิดข้อผิดพลาดในการบันทึก')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <Label className="text-sm font-medium">ชื่อครุภัณฑ์</Label>
+          <Input value={equipmentName} onChange={(e) => setEquipmentName(e.target.value)} className="mt-2" />
+        </div>
+        <div>
+          <Label className="text-sm font-medium">รหัสครุภัณฑ์</Label>
+          <Input value={equipmentCode} onChange={(e) => setEquipmentCode(e.target.value)} className="mt-2" />
+        </div>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div>
+          <Label className="text-sm font-medium">อาคาร</Label>
+          <Input value={building} onChange={(e) => setBuilding(e.target.value)} className="mt-2" />
+        </div>
+        <div>
+          <Label className="text-sm font-medium">ชั้น</Label>
+          <Input value={floor} onChange={(e) => setFloor(e.target.value)} className="mt-2" />
+        </div>
+        <div>
+          <Label className="text-sm font-medium">ห้อง</Label>
+          <Input value={room} onChange={(e) => setRoom(e.target.value)} className="mt-2" />
+        </div>
+      </div>
+      <div>
+        <Label className="text-sm font-medium">ผู้แจ้ง</Label>
+        <Input value={reporter} onChange={(e) => setReporter(e.target.value)} className="mt-2" />
+      </div>
+      <div>
+        <Label className="text-sm font-medium">รายละเอียดปัญหา</Label>
+        <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} className="mt-2" />
+      </div>
+      <div>
+        <Label className="text-sm font-medium mb-2 block">ความสำคัญ</Label>
+        <Select value={priority} onValueChange={(v: any) => setPriority(v)}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="high">สูง</SelectItem>
+            <SelectItem value="medium">ปานกลาง</SelectItem>
+            <SelectItem value="low">ต่ำ</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div>
+        <Label className="text-sm font-medium mb-2 block">มอบหมายให้ช่าง</Label>
+        <Select value={assignedTo} onValueChange={setAssignedTo}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">ไม่มอบหมาย</SelectItem>
+            {Object.entries(technicians).map(([id, name]) => (
+              <SelectItem key={id} value={id}>{name || id}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div>
+        <Label className="text-sm font-medium mb-2 block">สถานะ</Label>
+        <Select value={status} onValueChange={setStatus}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="pending">รอมอบหมาย</SelectItem>
+            <SelectItem value="assigned">มอบหมายแล้ว</SelectItem>
+            <SelectItem value="in-progress">กำลังซ่อม</SelectItem>
+            <SelectItem value="completed">เสร็จสิ้น</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="flex justify-end gap-2 pt-4">
+        <Button variant="outline" onClick={onClose}>ยกเลิก</Button>
+        <Button onClick={handleSave} disabled={saving} className="bg-gradient-to-r from-orange-500 to-amber-500">บันทึก</Button>
+      </div>
+    </div>
+  )
 }
+
 

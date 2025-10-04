@@ -1,5 +1,7 @@
 "use client"
 
+import AddRepairForm from '@/components/admin/AddRepairForm'
+
 import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
@@ -297,8 +299,96 @@ export default function MapPage() {
   }>({ show: false, type: "info", message: "" })
   const [saving, setSaving] = useState(false)
 
+  // loadEquipment is defined at component scope so it can be called from other places (event listeners)
+  const loadEquipment = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`/api/equipment/room/${selectedRoom.toUpperCase()}`);
+      if (response.ok) {
+        const data = await response.json();
+        const equipmentData = data.equipment || [];
+
+        const sortedEquipmentData = equipmentData.sort((a: any, b: any) => {
+          const aNum = parseInt(a.code?.match(/(\d+)$/)?.[1] || '0');
+          const bNum = parseInt(b.code?.match(/(\d+)$/)?.[1] || '0');
+          return aNum - bNum;
+        });
+
+        const repairData = data.repairs || [];
+        const repairMap = new Map();
+        repairData.forEach((repair: any) => {
+          if (repair.status !== 'completed') {
+            repairMap.set(repair.equipment_code, repair.status);
+          }
+        });
+
+        const formattedEquipment: Equipment[] = sortedEquipmentData.map((item: any, index: number) => {
+          let positionX = item.position_x;
+          let positionY = item.position_y;
+          const codeMatch = item.code?.match(/(\d+)$/);
+          let tableNumber = item.table_number || (codeMatch ? parseInt(codeMatch[1]) : index + 1);
+          let side = item.side;
+          let row = item.row_number;
+
+          if ((positionX === 0 || !positionX) && (positionY === 0 || !positionY)) {
+            const isLeftSide = index < sortedEquipmentData.length / 2;
+            side = isLeftSide ? 'left' : 'right';
+            if (isLeftSide) {
+              const leftIndex = index;
+              const rowIndex = Math.floor(leftIndex / 5);
+              const colIndex = leftIndex % 5;
+              positionX = 15 + (colIndex * 5);
+              positionY = 25 + (rowIndex * 10);
+              row = rowIndex + 1;
+            } else {
+              const rightIndex = index - Math.ceil(sortedEquipmentData.length / 2);
+              const rowIndex = Math.floor(rightIndex / 5);
+              const colIndex = rightIndex % 5;
+              positionX = 60 + (colIndex * 5);
+              positionY = 25 + (rowIndex * 10);
+              row = rowIndex + 1;
+            }
+          }
+
+          let equipmentStatus = 'working';
+          if (repairMap.has(item.code)) {
+            equipmentStatus = 'repair';
+          }
+
+          const equipment = {
+            id: item.id?.toString() || '',
+            name: item.name || '',
+            code: item.code || '',
+            type: item.type || 'computer',
+            status: equipmentStatus,
+            position: { x: positionX, y: positionY },
+            tableNumber: tableNumber,
+            side: side || 'left',
+            row: row || 1,
+            seat: (index % 5) + 1,
+            room: item.room || '',
+            building: item.building || '',
+            floor: item.floor?.toString() || '',
+          };
+
+          return equipment;
+        });
+
+        setEquipmentList(formattedEquipment);
+      } else {
+        console.error('Failed to fetch equipment data');
+        setEquipmentList([]);
+      }
+    } catch (error) {
+      console.error('Error fetching equipment:', error);
+      setEquipmentList([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // initial auth check and load
   useEffect(() => {
-    // ตรวจสอบสิทธิ์ผู้ใช้จาก localStorage
     const userStr = typeof window !== "undefined" ? localStorage.getItem("user") : null;
     if (!userStr) {
       router.push("/");
@@ -306,114 +396,34 @@ export default function MapPage() {
     }
     const user = JSON.parse(userStr);
     setCurrentUser(user);
-    
-    // ดึงข้อมูลครุภัณฑ์จาก API
-    const loadEquipment = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch(`/api/equipment/room/${selectedRoom.toUpperCase()}`);
-        if (response.ok) {
-          const data = await response.json();
-          // ตรวจสอบโครงสร้างข้อมูลที่ได้จาก API
-          const equipmentData = data.equipment || [];
-          
-          // เรียงลำดับข้อมูลตามรหัสครุภัณฑ์ก่อน
-          const sortedEquipmentData = equipmentData.sort((a: any, b: any) => {
-            const aNum = parseInt(a.code?.match(/(\d+)$/)?.[1] || '0');
-            const bNum = parseInt(b.code?.match(/(\d+)$/)?.[1] || '0');
-            return aNum - bNum;
-          });
-          
-          // ดึงรายการซ่อมจาก API response
-          const repairData = data.repairs || [];
-          
-          // สร้าง Map ของครุภัณฑ์ที่มีการแจ้งซ่อม (status ไม่เท่ากับ completed)
-          const repairMap = new Map();
-          repairData.forEach((repair: any) => {
-            if (repair.status !== 'completed') {
-              repairMap.set(repair.equipment_code, repair.status);
-            }
-          });
-          
-          // แปลงข้อมูลให้ตรงกับ interface Equipment
-          const formattedEquipment: Equipment[] = sortedEquipmentData.map((item: any, index: number) => {
-            // ถ้าไม่มีตำแหน่งในฐานข้อมูล ให้สร้างตำแหน่งอัตโนมัติ
-            let positionX = item.position_x;
-            let positionY = item.position_y;
-            
-            // ดึงหมายเลขจากรหัสครุภัณฑ์ เช่น PC-LC207-05 -> 5
-            const codeMatch = item.code?.match(/(\d+)$/);
-            let tableNumber = item.table_number || (codeMatch ? parseInt(codeMatch[1]) : index + 1);
-            
-            let side = item.side;
-            let row = item.row_number;
-            
-            // ถ้าตำแหน่งเป็น 0,0 ให้สร้างตำแหน่งใหม่แบบ grid layout
-            if ((positionX === 0 || !positionX) && (positionY === 0 || !positionY)) {
-              const isLeftSide = index < sortedEquipmentData.length / 2;
-              side = isLeftSide ? 'left' : 'right';
-              
-              if (isLeftSide) {
-                // ฝั่งซ้าย - 5 เครื่องต่อแถว, 5 แถว
-                const leftIndex = index;
-                const rowIndex = Math.floor(leftIndex / 5);
-                const colIndex = leftIndex % 5;
-                positionX = 15 + (colIndex * 5); // เริ่มจาก 15%, ห่างกัน 5%
-                positionY = 25 + (rowIndex * 10); // เริ่มจาก 25%, ห่างกัน 10%
-                row = rowIndex + 1;
-              } else {
-                // ฝั่งขวา - 5 เครื่องต่อแถว, 5 แถว
-                const rightIndex = index - Math.ceil(sortedEquipmentData.length / 2);
-                const rowIndex = Math.floor(rightIndex / 5);
-                const colIndex = rightIndex % 5;
-                positionX = 60 + (colIndex * 5); // เริ่มจาก 60%, ห่างกัน 5% (ปรับจาก 55% เป็น 60%)
-                positionY = 25 + (rowIndex * 10); // เริ่มจาก 25%, ห่างกัน 10%
-                row = rowIndex + 1;
-              }
-            }
-            
-            // กำหนดสถานะตามข้อมูลจาก tb_repair_requests
-            let equipmentStatus = 'working'; // ค่าเริ่มต้น = ใช้งานได้
-            if (repairMap.has(item.code)) {
-              // ถ้ามีการแจ้งซ่อมที่ยังไม่เสร็จ
-              const repairStatus = repairMap.get(item.code);
-              equipmentStatus = 'repair'; // เครื่องต้องซ่อม
-            }
-            
-            const equipment = {
-              id: item.id?.toString() || '',
-              name: item.name || '',
-              code: item.code || '',
-              type: item.type || 'computer',
-              status: equipmentStatus, // ใช้สถานะจาก repair_requests
-              position: { x: positionX, y: positionY },
-              tableNumber: tableNumber,
-              side: side || 'left',
-              row: row || 1,
-              seat: (index % 5) + 1,
-              room: item.room || '',
-              building: item.building || '',
-              floor: item.floor?.toString() || '',
-            };
-            
-            return equipment;
-          });
-          
-          setEquipmentList(formattedEquipment);
-        } else {
-          console.error('Failed to fetch equipment data');
-          setEquipmentList([]);
-        }
-      } catch (error) {
-        console.error('Error fetching equipment:', error);
-        setEquipmentList([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-    
     loadEquipment();
-  }, [router, selectedRoom])
+  }, [router, selectedRoom]);
+
+  // Listen for cross-window events or storage events to refresh equipment list
+  useEffect(() => {
+    const handler = (ev: any) => {
+      try {
+        // support CustomEvent from same window
+        if (ev && ev.type === 'repairRequestUpdated') {
+          loadEquipment();
+          return;
+        }
+        // support storage events
+        if (ev && ev.key === 'repairRequestUpdated') {
+          loadEquipment();
+        }
+      } catch (e) {
+        console.warn('repairRequestUpdated handler error', e)
+      }
+    }
+
+    window.addEventListener('repairRequestUpdated', handler as EventListener)
+    window.addEventListener('storage', handler as EventListener)
+    return () => {
+      window.removeEventListener('repairRequestUpdated', handler as EventListener)
+      window.removeEventListener('storage', handler as EventListener)
+    }
+  }, [selectedRoom])
 
   const showNotification = (type: "success" | "error" | "info", message: string) => {
     setNotification({ show: true, type, message })
@@ -917,10 +927,19 @@ export default function MapPage() {
       <Dialog open={showAddRepairDialog} onOpenChange={setShowAddRepairDialog}>
         <DialogContent className="max-w-3xl mx-4 sm:mx-auto max-h-[95vh] overflow-y-auto p-0 border-0 shadow-2xl">
           <div className="p-6">
-            <AddRepairRequestForm
-              equipment={selectedEquipment}
-              onSubmit={handleCreateRepairRequest}
-              onCancel={() => setShowAddRepairDialog(false)}
+            <AddRepairForm
+              onClose={() => setShowAddRepairDialog(false)}
+              onSuccess={async () => {
+                try {
+                  await loadEquipment()
+                } catch (e) {
+                  console.warn('Failed to reload equipment after create', e)
+                }
+                // reset selections and close dialog
+                setSelectedEquipment(null)
+                setShowAddRepairDialog(false)
+                showNotification('success', 'สร้างรายการแจ้งซ่อมสำเร็จ')
+              }}
             />
           </div>
         </DialogContent>
@@ -945,6 +964,8 @@ function EquipmentDetailContent({
   onCreateRepair: () => void
   isAdmin: boolean
 }) {
+  const router = useRouter()
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [notes, setNotes] = useState("")
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [localNotification, setLocalNotification] = useState<{ show: boolean; type: "success" | "error" | "info"; message: string }>({ show: false, type: 'info', message: '' })

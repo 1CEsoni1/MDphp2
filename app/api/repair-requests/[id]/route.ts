@@ -79,10 +79,22 @@ export async function PATCH(req: Request, { params }: any) {
 			const ctxParams = await params;
 			// Normalise fields (formidable may return arrays for each field)
 			const rawStatus = body.status;
+			const rawEquipmentName = body.equipment_name || body.equipmentName || body.equipmentName || body.equipmentName;
+			const rawEquipmentCode = body.equipment_code || body.equipmentCode || body.code;
+			const rawBuilding = body.building;
+			const rawFloor = body.floor;
+			const rawRoom = body.room;
+			const rawReporter = body.reporter;
 			const rawAssignedTo = body.assignedTo;
 			const rawNotes = body.notes;
 			const rawChangedBy = body.changedBy;
 			const status = Array.isArray(rawStatus) ? rawStatus[0] : rawStatus;
+			const equipmentName = Array.isArray(rawEquipmentName) ? rawEquipmentName[0] : rawEquipmentName;
+			const equipmentCode = Array.isArray(rawEquipmentCode) ? rawEquipmentCode[0] : rawEquipmentCode;
+			const building = Array.isArray(rawBuilding) ? rawBuilding[0] : rawBuilding;
+			const floor = Array.isArray(rawFloor) ? rawFloor[0] : rawFloor;
+			const room = Array.isArray(rawRoom) ? rawRoom[0] : rawRoom;
+			const reporter = Array.isArray(rawReporter) ? rawReporter[0] : rawReporter;
 			let assignedTo = Array.isArray(rawAssignedTo) ? rawAssignedTo[0] : rawAssignedTo;
 			const notes = Array.isArray(rawNotes) ? rawNotes[0] : rawNotes;
 			const changedBy = Array.isArray(rawChangedBy) ? rawChangedBy[0] : rawChangedBy;
@@ -135,6 +147,32 @@ export async function PATCH(req: Request, { params }: any) {
 				const updateParts: string[] = ['status = ?', 'assigned_to = ?', 'notes = ?', 'updated_at = CURRENT_TIMESTAMP'];
 				const updateParams: any[] = [status, assignedTo || null, notes || null];
 
+				// include optional editable fields if provided
+				if (equipmentName !== undefined) {
+					updateParts.push('equipment_name = ?');
+					updateParams.push(equipmentName);
+				}
+				if (equipmentCode !== undefined) {
+					updateParts.push('equipment_code = ?');
+					updateParams.push(equipmentCode);
+				}
+				if (building !== undefined) {
+					updateParts.push('building = ?');
+					updateParams.push(building);
+				}
+				if (floor !== undefined) {
+					updateParts.push('floor = ?');
+					updateParams.push(floor);
+				}
+				if (room !== undefined) {
+					updateParts.push('room = ?');
+					updateParams.push(room);
+				}
+				if (reporter !== undefined) {
+					updateParts.push('reporter = ?');
+					updateParams.push(reporter);
+				}
+
 				if (assignedDateToSet) {
 					updateParts.push('assigned_date = ?');
 					updateParams.push(assignedDateToSet);
@@ -148,6 +186,19 @@ export async function PATCH(req: Request, { params }: any) {
 				updateParams.push(ctxParams.id);
 
 				await conn.execute(updateSql, updateParams);
+
+				// Sync equipment status: if status is completed -> set equipment to working, otherwise mark as repair
+				try {
+					// Get the equipment_code for this repair (if present)
+					const [rrRows]: any = await conn.execute('SELECT equipment_code FROM tb_repair_requests WHERE id = ?', [ctxParams.id]);
+					if (rrRows && rrRows.length > 0 && rrRows[0].equipment_code) {
+						const eqCode = String(rrRows[0].equipment_code);
+						const eqStatus = status === 'completed' ? 'working' : 'repair';
+						await conn.execute('UPDATE tb_equipment SET status = ? WHERE code = ? LIMIT 1', [eqStatus, eqCode]);
+					}
+				} catch (e) {
+					console.warn('failed to sync tb_equipment status on PATCH', e);
+				}
 
 				// Insert status log
 				if (oldStatus !== status && changedBy) {
@@ -273,4 +324,125 @@ export async function PATCH(req: Request, { params }: any) {
 					const errStack = errAny?.stack ? errAny.stack : null
 					return NextResponse.json({ success: false, message: 'DB error', error: errMsg, stack: errStack }, { status: 500 });
 		}
+}
+
+export async function DELETE(req: Request, { params }: any) {
+	const ctxParams = await params;
+	const id = ctxParams.id;
+	if (!id) return NextResponse.json({ success: false, message: 'missing id' }, { status: 400 });
+
+	// basic admin check: expect header x-user-id and verify type_id === '01'
+	try {
+		const userId = req.headers.get('x-user-id');
+		if (!userId) return NextResponse.json({ success: false, message: 'missing user id header' }, { status: 401 });
+
+		const conn = await mysql.createConnection({
+			host: process.env.DB_HOST || "localhost",
+			user: process.env.DB_USER || "root",
+			password: process.env.DB_PASS || "",
+			database: process.env.DB_NAME || "equipment_repair",
+		});
+
+		try {
+			// Some schemas use `id` as the primary key column. Try `id` first.
+			let uRows: any = [];
+			try {
+				const res: any = await conn.execute('SELECT type_id FROM tb_users WHERE id = ? LIMIT 1', [userId]);
+				uRows = res[0];
+			} catch (colErr) {
+				// fallback to user_id column if present
+				const res: any = await conn.execute('SELECT type_id FROM tb_users WHERE user_id = ? LIMIT 1', [userId]);
+				uRows = res[0];
+			}
+			if (!uRows || uRows.length === 0) {
+				await conn.end();
+				return NextResponse.json({ success: false, message: 'user not found' }, { status: 401 });
+			}
+			const typeId = uRows[0].type_id;
+			if (String(typeId) !== '01') {
+				await conn.end();
+				return NextResponse.json({ success: false, message: 'forbidden' }, { status: 403 });
+			}
+
+			// Fetch equipment_code and images
+			const [rrRows]: any = await conn.execute('SELECT equipment_code, images FROM tb_repair_requests WHERE id = ? LIMIT 1', [id]);
+			if (!rrRows || rrRows.length === 0) {
+				await conn.end();
+				return NextResponse.json({ success: false, message: 'not found' }, { status: 404 });
+			}
+			const equipmentCode = rrRows[0].equipment_code;
+
+			// Collect filenames from tb_images
+			const [imgRows]: any = await conn.execute('SELECT image_url FROM tb_images WHERE repair_request_id = ?', [id]);
+			const filenames: string[] = [];
+			if (Array.isArray(imgRows) && imgRows.length > 0) {
+				for (const r of imgRows) {
+					if (r && r.image_url) filenames.push(String(r.image_url));
+				}
+			}
+
+			// parse images JSON column as fallback
+			try {
+				if (rrRows[0].images) {
+					const raw = typeof rrRows[0].images === 'string' ? rrRows[0].images : JSON.stringify(rrRows[0].images);
+					const parsed = JSON.parse(raw || '[]');
+					if (Array.isArray(parsed)) filenames.push(...parsed.map((it: any) => String(it)).filter(Boolean));
+				}
+			} catch (e) {
+				// ignore
+			}
+
+			// Delete related rows (no transaction - execute sequentially)
+			try {
+				await conn.execute('DELETE FROM tb_images WHERE repair_request_id = ?', [id]);
+			} catch (e) { console.warn('failed to delete tb_images rows', e); }
+			try {
+				await conn.execute('DELETE FROM tb_status_logs WHERE repair_request_id = ?', [id]);
+			} catch (e) { console.warn('failed to delete tb_status_logs rows', e); }
+			try {
+				await conn.execute('DELETE FROM tb_repair_requests WHERE id = ? LIMIT 1', [id]);
+			} catch (e) { console.warn('failed to delete tb_repair_requests row', e); }
+
+			// Reconcile equipment status
+			try {
+				if (equipmentCode) {
+					const [countRows]: any = await conn.execute("SELECT COUNT(*) AS cnt FROM tb_repair_requests WHERE equipment_code = ? AND status != 'completed'", [equipmentCode]);
+					const cnt = (Array.isArray(countRows) && countRows[0] && (countRows[0].cnt !== undefined)) ? Number(countRows[0].cnt) : 0;
+					const newEqStatus = cnt === 0 ? 'working' : 'repair';
+					await conn.execute('UPDATE tb_equipment SET status = ? WHERE code = ? LIMIT 1', [newEqStatus, equipmentCode]);
+				}
+			} catch (e) {
+				console.warn('failed to reconcile equipment status after delete', e);
+			}
+
+			await conn.end();
+
+			// Unlink files after successful commit
+			try {
+				const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
+				for (const fn of filenames) {
+					if (!fn) continue;
+					const p = path.join(uploadsDir, String(fn));
+					try {
+						if (fs.existsSync(p)) fs.unlinkSync(p);
+					} catch (e) {
+						console.warn('failed to unlink file', p, e);
+					}
+				}
+			} catch (e) {
+				console.warn('failed to remove uploaded files', e);
+			}
+
+			return NextResponse.json({ success: true, message: 'deleted successfully' });
+		} catch (innerErr) {
+			try { await conn.rollback(); } catch (rbErr) { console.warn('rollback failed', rbErr); }
+			await conn.end();
+			console.error('[DELETE] inner error', innerErr);
+			return NextResponse.json({ success: false, message: 'delete error', error: String(innerErr) }, { status: 500 });
+		}
+	} catch (e) {
+		console.error('[DELETE] unhandled error', e);
+		const errAny: any = e;
+		return NextResponse.json({ success: false, message: 'delete error', error: errAny?.message || String(errAny) }, { status: 500 });
+	}
 }

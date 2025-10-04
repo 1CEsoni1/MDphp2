@@ -116,6 +116,16 @@ export async function POST(req: Request) {
 			[equipment_code, equipment_name, dbBuilding, dbFloor, dbRoom, status, description, reporter, assignedTo, assignedDate, priority || 'medium']
 		);
 
+		// Attempt to update equipment status in tb_equipment to reflect this new repair
+		try {
+			if (equipment_code) {
+				const newEqStatus = status === 'completed' ? 'working' : 'repair';
+				await conn.execute('UPDATE tb_equipment SET status = ? WHERE code = ? LIMIT 1', [newEqStatus, equipment_code]);
+			}
+		} catch (e) {
+			console.warn('failed to update tb_equipment status on create', e);
+		}
+
 		await conn.end();
 
 		return NextResponse.json({
