@@ -533,7 +533,7 @@ export default function AdminDashboard() {
                 </div>
                 <div>
                   <h1 className="text-base sm:text-lg font-semibold text-gray-900">Admin Dashboard</h1>
-                  <p className="text-xs sm:text-sm text-gray-500 hidden sm:block">ระบบจัดการแจ้งซ่อมครุภัณฑ์</p>
+                  <p className="text-xs sm:text-sm text-gray-500 hidden sm:block">ระบบจัดการครุภัณฑ์เชิงพื้นที่</p>
                 </div>
               </div>
             </div>

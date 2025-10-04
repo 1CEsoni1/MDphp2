@@ -6,9 +6,9 @@ import "./globals.css"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "ระบบแจ้งซ่อมครุภัณฑ์",
-  description: "Equipment Repair Management System",
-    generator: 'v0.app'
+  title: "ระบบจัดการครุภัณฑ์เชิงพื้นที่",
+  description: "Spatial Equipment Management System",
+  generator: 'v0.app'
 }
 
 export default function RootLayout({

@@ -1,5 +1,6 @@
 {
-  "name": "my-v0-project",
+  "name": "Spatial Equipment Management System",
+  "description": "ระบบจัดการครุภัณฑ์เชิงพื้นที่",
   "version": "0.1.0",
   "private": true,
   "scripts": {

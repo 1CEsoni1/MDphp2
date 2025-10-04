@@ -86,8 +86,8 @@ export default function LoginPage() {
             <div className="mx-auto mb-6 w-20 h-20 bg-gradient-to-br from-orange-500 to-amber-500 rounded-2xl flex items-center justify-center shadow-lg">
               <Settings className="w-10 h-10 text-white" />
             </div>
-            <CardTitle className="text-2xl font-bold text-gray-800 mb-2">ระบบแจ้งซ่อมครุภัณฑ์</CardTitle>
-            <CardDescription className="text-gray-600">Equipment Repair Management System</CardDescription>
+            <CardTitle className="text-2xl font-bold text-gray-800 mb-2">ระบบจัดการครุภัณฑ์เชิงพื้นที่</CardTitle>
+            <CardDescription className="text-gray-600">Spatial Equipment Management System</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="space-y-2">
