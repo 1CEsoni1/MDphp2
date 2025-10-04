@@ -544,7 +544,7 @@ export default function MapPage() {
       <div>
         <label className="text-sm font-medium mb-2 block">อาคาร</label>
         <Select value={selectedBuilding} onValueChange={setSelectedBuilding}>
-          <SelectTrigger>
+          <SelectTrigger className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -560,7 +560,7 @@ export default function MapPage() {
       <div>
         <label className="text-sm font-medium mb-2 block">ชั้น</label>
         <Select value={selectedFloor} onValueChange={setSelectedFloor}>
-          <SelectTrigger>
+          <SelectTrigger className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -574,7 +574,7 @@ export default function MapPage() {
       <div>
         <label className="text-sm font-medium mb-2 block">ห้อง</label>
         <Select value={selectedRoom} onValueChange={setSelectedRoom}>
-          <SelectTrigger>
+          <SelectTrigger className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -592,29 +592,29 @@ export default function MapPage() {
       {currentUser?.type_id === "01" && (
         <div className="pt-4 border-t">
           <h4 className="text-sm font-medium mb-3">การจัดการ</h4>
-          <div className="space-y-2">
-            <Button
-              size="sm"
-              variant="outline"
-              className="w-full justify-start bg-transparent"
-              onClick={() => {
-                setShowAddRepairDialog(true)
-                setShowMobileControls(false)
-              }}
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              สร้างรายการซ่อม
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="w-full justify-start bg-transparent"
-              onClick={() => router.push('/admin/equipment')}
-            >
-              <Edit className="w-4 h-4 mr-2" />
-              จัดการครุภัณฑ์
-            </Button>
-          </div>
+            <div className="space-y-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full justify-start bg-transparent"
+                onClick={() => {
+                  setShowAddRepairDialog(true)
+                  setShowMobileControls(false)
+                }}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                สร้างรายการซ่อม
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full justify-start bg-transparent"
+                onClick={() => router.push('/admin/equipment')}
+              >
+                <Edit className="w-4 h-4 mr-2" />
+                จัดการครุภัณฑ์
+              </Button>
+            </div>
         </div>
       )}
 
@@ -658,7 +658,7 @@ export default function MapPage() {
                     <Menu className="w-4 h-4" />
                   </Button>
                 </SheetTrigger>
-                <SheetContent side="left" className="w-80">
+                <SheetContent side="left" className="w-full sm:w-80">
                   <SheetHeader>
                     <SheetTitle className="flex items-center gap-2">
                       <Building className="w-5 h-5 text-orange-600" />
@@ -681,7 +681,9 @@ export default function MapPage() {
                         กลับ Dashboard
                       </Button>
                     </div>
-                    <MobileControls />
+                    <div className="px-2 sm:px-0">
+                      <MobileControls />
+                    </div>
                   </div>
                 </SheetContent>
               </Sheet>
@@ -764,7 +766,7 @@ export default function MapPage() {
               <CardContent className="p-2 sm:p-6">
                 <div
                   className="relative bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl overflow-hidden shadow-inner"
-                  style={{ height: "500px", minHeight: "500px" }}
+                  style={{ height: "min(70vh, 600px)", minHeight: "360px" }}
                 >
                   {/* Room Layout */}
                   <div className="absolute inset-2 sm:inset-4 bg-white rounded-lg border-2 border-gray-300 shadow-sm">
@@ -901,7 +903,7 @@ export default function MapPage() {
 
       {/* Equipment Detail Dialog */}
       <Dialog open={showEquipmentDialog} onOpenChange={setShowEquipmentDialog}>
-        <DialogContent className="max-w-md mx-4 sm:mx-auto">
+        <DialogContent className="w-full mx-2 sm:mx-auto sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {selectedEquipment && getEquipmentIcon(selectedEquipment.type)}
@@ -925,7 +927,11 @@ export default function MapPage() {
 
       {/* Add Repair Request Dialog */}
       <Dialog open={showAddRepairDialog} onOpenChange={setShowAddRepairDialog}>
-        <DialogContent className="max-w-3xl mx-4 sm:mx-auto max-h-[95vh] overflow-y-auto p-0 border-0 shadow-2xl">
+        <DialogContent className="w-full mx-2 sm:mx-auto sm:max-w-3xl max-h-[95vh] overflow-y-auto p-0 border-0 shadow-2xl">
+          <DialogHeader className="p-0">
+            {/* Add a DialogTitle to satisfy Radix accessibility checks. The form itself renders its own heading, so keep this visually hidden. */}
+            <DialogTitle className="sr-only">สร้างรายการแจ้งซ่อม</DialogTitle>
+          </DialogHeader>
           <div className="p-6">
             <AddRepairForm
               onClose={() => setShowAddRepairDialog(false)}

@@ -8,10 +8,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Eye, Edit, Trash2 } from "lucide-react"
+// icons removed for simplified list UI
 
 export default function AdminEquipmentPage() {
   const router = useRouter()
+  const [searchTerm, setSearchTerm] = useState("")
   const [items, setItems] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [editing, setEditing] = useState<any | null>(null)
@@ -38,51 +39,87 @@ export default function AdminEquipmentPage() {
             <CardTitle>จัดการครุภัณฑ์ (หน้าเบื้องต้น)</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="mb-4">
-              <Button onClick={() => router.push('/admin/dashboard')}>กลับไปหน้า Admin</Button>
+            <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <Button onClick={() => router.push('/admin/dashboard')}>กลับไปหน้า Admin</Button>
+                <h2 className="text-lg font-semibold">จัดการครุภัณฑ์ (หน้าเบื้องต้น)</h2>
+              </div>
+              <div className="flex-1 sm:max-w-sm">
+                <Input
+                  placeholder="ค้นหารหัสครุภัณฑ์ หรือชื่อ..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="h-10"
+                />
+              </div>
             </div>
 
             {loading ? <div>Loading...</div> : (
-              <div className="overflow-x-auto">
-                <Table>
+              <>
+                {/* Card list for small screens */}
+                <div className="space-y-3 sm:hidden">
+                  {items
+                    .filter((it) => {
+                      const q = searchTerm.trim().toLowerCase()
+                      if (!q) return true
+                      return (
+                        String(it.name || it.equipment_name || it.code).toLowerCase().includes(q) ||
+                        String(it.id).toLowerCase().includes(q) ||
+                        String(it.room || '').toLowerCase().includes(q)
+                      )
+                    })
+                    .map((it) => (
+                      <div key={it.id} className="p-3 bg-white rounded-lg border shadow-sm flex items-center justify-between">
+                        <div>
+                          <div className="font-medium text-sm">{it.name || it.equipment_name || it.code}</div>
+                          <div className="text-xs text-gray-500">{it.id} • {it.room || `${it.building || ''} ${it.floor || ''}`}</div>
+                        </div>
+                        <div className="ml-3 text-right">
+                          <div className={`inline-block text-xs px-2 py-1 rounded-full ${it.status === 'repair' ? 'bg-red-100 text-red-700' : it.status === 'maintenance' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>
+                            {it.status}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+
+                <div className="hidden sm:block overflow-x-auto">
+                  <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead>รหัส</TableHead>
-                      <TableHead>ครุภัณฑ์</TableHead>
-                      <TableHead>สถานที่</TableHead>
-                      <TableHead>สถานะ</TableHead>
-                      <TableHead>การจัดการ</TableHead>
+                    <TableRow className="bg-white">
+                      <TableHead className="sticky top-0 bg-white w-16">รหัส</TableHead>
+                      <TableHead className="sticky top-0 bg-white">ครุภัณฑ์</TableHead>
+                      <TableHead className="sticky top-0 bg-white w-48">สถานที่</TableHead>
+                      <TableHead className="sticky top-0 bg-white w-32">สถานะ</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {items.map((it) => (
-                      <TableRow key={it.id}>
-                        <TableCell>{it.id}</TableCell>
-                        <TableCell>{it.name || it.equipment_name || it.code}</TableCell>
-                        <TableCell>{it.room || `${it.building || ''} ${it.floor || ''}`}</TableCell>
-                        <TableCell>{it.status}</TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            <Button variant="ghost" size="sm" onClick={() => setEditing(it)}><Edit className="w-4 h-4"/></Button>
-                            <Button variant="ghost" size="sm" className="text-red-600" onClick={async () => {
-                              if (!confirm('ลบอุปกรณ์ใช่หรือไม่?')) return
-                              try {
-                                const res = await fetch(`/api/equipment?id=${it.id}`, { method: 'DELETE' })
-                                const j = await res.json()
-                                if (res.ok) {
-                                  load()
-                                } else {
-                                  alert(j.error || 'ลบไม่สำเร็จ')
-                                }
-                              } catch (e) { console.error(e); alert('ลบไม่สำเร็จ') }
-                            }}><Trash2 className="w-4 h-4"/></Button>
+                    {items
+                      .filter((it) => {
+                        const q = searchTerm.trim().toLowerCase()
+                        if (!q) return true
+                        return (
+                          String(it.name || it.equipment_name || it.code).toLowerCase().includes(q) ||
+                          String(it.id).toLowerCase().includes(q) ||
+                          String(it.room || '').toLowerCase().includes(q)
+                        )
+                      })
+                      .map((it, idx) => (
+                      <TableRow key={it.id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                        <TableCell className="py-3 w-16">{it.id}</TableCell>
+                        <TableCell className="py-3">{it.name || it.equipment_name || it.code}</TableCell>
+                        <TableCell className="py-3 w-48">{it.room || `${it.building || ''} ${it.floor || ''}`}</TableCell>
+                        <TableCell className="py-3 w-32"> 
+                          <div className={`inline-block text-sm px-2 py-1 rounded-full ${it.status === 'repair' ? 'bg-red-100 text-red-700' : it.status === 'maintenance' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>
+                            {it.status}
                           </div>
                         </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
-              </div>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>

@@ -89,7 +89,7 @@ export default function AddRepairForm({ onClose, onSuccess }: { onClose: () => v
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div>
           <Label htmlFor="building">อาคาร</Label>
           <Input
@@ -131,7 +131,7 @@ export default function AddRepairForm({ onClose, onSuccess }: { onClose: () => v
         />
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div>
           <Label htmlFor="priority">ความสำคัญ</Label>
           <Select
@@ -160,11 +160,11 @@ export default function AddRepairForm({ onClose, onSuccess }: { onClose: () => v
       </div>
 
       <div className="flex flex-col sm:flex-row justify-end gap-2 pt-4">
-        <Button variant="outline" onClick={onClose} className="order-2 sm:order-1 bg-transparent">
+        <Button variant="outline" onClick={onClose} className="order-2 sm:order-1 bg-transparent w-full sm:w-auto">
           ยกเลิก
         </Button>
         <Button
-          className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 order-1 sm:order-2"
+          className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 order-1 sm:order-2 w-full sm:w-auto"
           onClick={handleSubmit}
         >
           บันทึก

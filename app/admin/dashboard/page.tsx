@@ -428,24 +428,7 @@ export default function AdminDashboard() {
             <MapPin className="w-4 h-4 mr-2" />
             ดูแผนผังครุภัณฑ์
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="w-full justify-start bg-white/80 border-gray-200 text-gray-700 hover:bg-gray-50"
-            onClick={() => showNotification("info", "ฟีเจอร์รายงานกำลังพัฒนา")}
-          >
-            <BarChart3 className="w-4 h-4 mr-2" />
-            ดูรายงานสถิติ
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="w-full justify-start bg-white/80 border-gray-200 text-gray-700 hover:bg-gray-50"
-            onClick={() => showNotification("info", "ฟีเจอร์การจัดการผู้ใช้กำลังพัฒนา")}
-          >
-            <Users className="w-4 h-4 mr-2" />
-            จัดการผู้ใช้งาน
-          </Button>
+
         </div>
       </div>
 
@@ -633,8 +616,8 @@ export default function AdminDashboard() {
                   <span className="text-sm">เพิ่มรายการแจ้งซ่อม</span>
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl mx-4 sm:mx-auto max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
+              <DialogContent className="w-full mx-2 sm:mx-auto sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+                <DialogHeader className="p-0 sm:p-0">
                   <DialogTitle>เพิ่มรายการแจ้งซ่อมใหม่</DialogTitle>
                   <DialogDescription>กรอกข้อมูลครุภัณฑ์และรายละเอียดการซ่อม</DialogDescription>
                 </DialogHeader>
@@ -724,8 +707,8 @@ export default function AdminDashboard() {
                                 <Eye className="w-3 h-3 sm:w-4 sm:h-4" />
                               </Button>
                             </DialogTrigger>
-                            <DialogContent className="mx-4 sm:mx-auto max-h-[90vh] overflow-y-auto">
-                              <DialogHeader>
+                            <DialogContent className="w-full mx-2 sm:mx-auto sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+                              <DialogHeader className="p-0 sm:p-0">
                                 <DialogTitle>รายละเอียดงานซ่อม #{request.id}</DialogTitle>
                               </DialogHeader>
                               <ViewRequestDialog request={request} onUpdateStatus={handleUpdateStatus} technicians={technicians} />
@@ -777,8 +760,8 @@ export default function AdminDashboard() {
       />
       {editingRequest && (
         <Dialog open={!!editingRequest} onOpenChange={(open) => { if (!open) setEditingRequest(null) }}>
-          <DialogContent className="max-w-2xl mx-4 sm:mx-auto max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
+          <DialogContent className="w-full mx-2 sm:mx-auto sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+            <DialogHeader className="p-0 sm:p-0">
               <DialogTitle>แก้ไขรายการแจ้งซ่อม #{editingRequest.id}</DialogTitle>
             </DialogHeader>
             <EditRequestDialog

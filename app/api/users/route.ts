@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET() {
   try {
-    // เรียก PHP API
-    const response = await fetch('http://localhost/modul/New%20folder/MDphp2/api/endpoints/users.php');
+    // เรียก PHP API (ใช้ตัวแปรสภาพแวดล้อมเพื่อให้ปรับบนเครื่องอื่นได้)
+    const base = process.env.PHP_API_BASE || 'http://localhost/modul/New%20folder/MDphp2';
+    const url = `${base.replace(/\/$/, '')}/api/endpoints/users.php`;
+    const response = await fetch(url);
     
     if (!response.ok) {
       throw new Error('Failed to fetch users');
