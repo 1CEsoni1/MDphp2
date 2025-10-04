@@ -308,7 +308,7 @@ export default function MapPage() {
     setCurrentUser(user);
     
     // ดึงข้อมูลครุภัณฑ์จาก API
-    const fetchEquipment = async () => {
+    const loadEquipment = async () => {
       try {
         setLoading(true);
         const response = await fetch(`/api/equipment/room/${selectedRoom.toUpperCase()}`);
@@ -412,7 +412,7 @@ export default function MapPage() {
       }
     };
     
-    fetchEquipment();
+    loadEquipment();
   }, [router, selectedRoom])
 
   const showNotification = (type: "success" | "error" | "info", message: string) => {
@@ -599,7 +599,7 @@ export default function MapPage() {
               size="sm"
               variant="outline"
               className="w-full justify-start bg-transparent"
-              onClick={() => showNotification("info", "ฟีเจอร์นี้กำลังพัฒนา")}
+              onClick={() => router.push('/admin/equipment')}
             >
               <Edit className="w-4 h-4 mr-2" />
               จัดการครุภัณฑ์
@@ -881,44 +881,7 @@ export default function MapPage() {
                     </div>
                   </div>
 
-                  {/* Quick Actions for Admin */}
-                  {currentUser?.type_id === "01" && (
-                    <div className="p-4 bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg border border-orange-200 shadow-sm">
-                      <h4 className="text-sm font-semibold text-orange-800 mb-3 flex items-center gap-2">
-                        <Settings className="w-4 h-4" />
-                        การจัดการด่วน
-                      </h4>
-                      <div className="space-y-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="w-full justify-start text-orange-700 border-orange-300 hover:bg-orange-100 bg-transparent"
-                          onClick={() => setShowAddRepairDialog(true)}
-                        >
-                          <Plus className="w-4 h-4 mr-2" />
-                          สร้างรายการแจ้งซ่อม
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="w-full justify-start text-orange-700 border-orange-300 hover:bg-orange-100 bg-transparent"
-                          onClick={() => showNotification("info", "ฟีเจอร์การจัดการครุภัณฑ์กำลังพัฒนา")}
-                        >
-                          <Edit className="w-4 h-4 mr-2" />
-                          จัดการครุภัณฑ์
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="w-full justify-start text-orange-700 border-orange-300 hover:bg-orange-100 bg-transparent"
-                          onClick={() => showNotification("info", "ฟีเจอร์รายงานกำลังพัฒนา")}
-                        >
-                          <Users className="w-4 h-4 mr-2" />
-                          ดูรายงาน
-                        </Button>
-                      </div>
-                    </div>
-                  )}
+                  {/* Quick Actions for Admin removed per request */}
                 </div>
               </CardContent>
             </Card>
@@ -984,8 +947,6 @@ function EquipmentDetailContent({
 }) {
   const [notes, setNotes] = useState("")
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const router = useRouter()
   const [localNotification, setLocalNotification] = useState<{ show: boolean; type: "success" | "error" | "info"; message: string }>({ show: false, type: 'info', message: '' })
   const [savingLocal, setSavingLocal] = useState(false)
 

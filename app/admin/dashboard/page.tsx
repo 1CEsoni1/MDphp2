@@ -693,7 +693,7 @@ export default function AdminDashboard() {
                               <DialogHeader>
                                 <DialogTitle>รายละเอียดงานซ่อม #{request.id}</DialogTitle>
                               </DialogHeader>
-                              <ViewRequestDialog request={request} onUpdateStatus={handleUpdateStatus} />
+                              <ViewRequestDialog request={request} onUpdateStatus={handleUpdateStatus} technicians={technicians} />
                             </DialogContent>
                           </Dialog>
                           <Button
@@ -908,13 +908,19 @@ function AddRepairForm({ onClose, onSuccess }: { onClose: () => void; onSuccess:
 function ViewRequestDialog({
   request,
   onUpdateStatus,
+  technicians,
 }: {
   request: RepairRequest
   onUpdateStatus: (id: string, status: RepairRequest["status"], assignedTo?: string) => void
+  technicians: { [key: string]: string }
 }) {
-  const [assignedTo, setAssignedTo] = useState(request.assignedTo || "none")
+  // Prefer room-assigned technician if available, otherwise use request.assignedTo
+  const initialAssigned = request.roomAssignedTechnician || request.assignedTo || "none"
+  const [assignedTo, setAssignedTo] = useState<string>(initialAssigned)
+  const [selectedStatus, setSelectedStatus] = useState<RepairRequest["status"] | undefined>(request.status)
 
   const handleStatusUpdate = (status: RepairRequest["status"]) => {
+    setSelectedStatus(status)
     onUpdateStatus(request.id, status, assignedTo === "none" ? undefined : assignedTo)
   }
 
@@ -948,6 +954,38 @@ function ViewRequestDialog({
         </div>
       </div>
 
+      {/* Notes */}
+      <div>
+        <Label className="text-sm font-medium">หมายเหตุ (Notes)</Label>
+        <div className="mt-1 p-3 bg-gray-50 rounded-lg border">
+          <p className="text-sm text-gray-700">{request.notes || '-'}</p>
+        </div>
+      </div>
+
+      {/* Images */}
+      <div>
+        <Label className="text-sm font-medium">ภาพหลักฐาน</Label>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {(request.images || []).length === 0 && <p className="text-sm text-gray-500">ไม่มีภาพ</p>}
+          {((request.images || []) as string[]).map((rawImg: string, idx: number) => {
+            // normalize to absolute path or keep data/http URIs
+            let img = String(rawImg || '').trim()
+            if (!img) return null
+            if (img.startsWith('data:') || img.startsWith('http') || img.startsWith('/')) {
+              // keep as-is
+            } else {
+              // ensure /uploads/ prefix for bare filenames
+              img = `/uploads/${img.replace(/^\/+/, '')}`
+            }
+            return (
+              <a key={idx} href={img} target="_blank" rel="noreferrer" className="inline-block">
+                <img src={img} alt={`evidence-${idx}`} className="w-24 h-24 object-cover rounded border" />
+              </a>
+            )
+          })}
+        </div>
+      </div>
+
       <div>
         <Label className="text-sm font-medium mb-2 block">มอบหมายให้ช่าง</Label>
         <Select value={assignedTo} onValueChange={setAssignedTo}>
@@ -956,21 +994,26 @@ function ViewRequestDialog({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="none">ไม่มอบหมาย</SelectItem>
-            <SelectItem value="ช่างสมชาย">ช่างสมชาย</SelectItem>
-            <SelectItem value="ช่างสมหญิง">ช่างสมหญิง</SelectItem>
+            {Object.entries(technicians).map(([id, name]) => (
+              <SelectItem key={id} value={id}>{name || id}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
+        <p className="text-xs text-gray-500 mt-1">
+          ช่างที่ประจำห้อง: {request.roomAssignedTechnicianName || request.roomAssignedTechnician || 'ยังไม่มี'}
+        </p>
       </div>
 
       <div>
         <Label className="text-sm font-medium mb-2 block">อัปเดตสถานะ</Label>
+        <p className="text-xs text-gray-600 mb-2">สถานะปัจจุบัน: {selectedStatus || request.status || 'ไม่ทราบ'}</p>
         <div className="flex flex-col sm:flex-row gap-2">
           <Button
             size="sm"
             variant="outline"
             onClick={() => handleStatusUpdate("assigned")}
             disabled={assignedTo === "none"}
-            className="bg-transparent"
+            className={`bg-transparent ${selectedStatus === 'assigned' ? 'ring-2 ring-offset-1 ring-blue-200' : ''}`}
           >
             มอบหมายงาน
           </Button>
@@ -978,14 +1021,14 @@ function ViewRequestDialog({
             size="sm"
             variant="outline"
             onClick={() => handleStatusUpdate("in-progress")}
-            className="text-blue-600 border-blue-600 hover:bg-blue-50 bg-transparent"
+            className={`text-blue-600 border-blue-600 hover:bg-blue-50 bg-transparent ${selectedStatus === 'in-progress' ? 'ring-2 ring-offset-1 ring-purple-200' : ''}`}
           >
             กำลังซ่อม
           </Button>
           <Button
             size="sm"
             onClick={() => handleStatusUpdate("completed")}
-            className="bg-green-600 hover:bg-green-700 text-white"
+            className={`bg-green-600 hover:bg-green-700 text-white ${selectedStatus === 'completed' ? 'opacity-90' : ''}`}
           >
             เสร็จสิ้น
           </Button>

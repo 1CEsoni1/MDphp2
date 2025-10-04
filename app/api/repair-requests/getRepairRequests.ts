@@ -14,10 +14,13 @@ export async function GET(req: Request) {
       `SELECT rr.id, rr.equipment_code, rr.equipment_name, rr.building, rr.floor, rr.room,
               rr.status, rr.description, rr.reporter, rr.assigned_to, u.name as assigned_to_name,
               rr.priority, rr.report_date, rr.assigned_date, rr.completed_date, rr.images, rr.notes,
+              r.assigned_technician as room_assigned_technician, ru.name as room_assigned_name,
               GROUP_CONCAT(i.image_url SEPARATOR '||') as images_from_table
        FROM tb_repair_requests rr
        LEFT JOIN tb_users u ON rr.assigned_to = u.id
        LEFT JOIN tb_images i ON i.repair_request_id = rr.id
+       LEFT JOIN tb_room r ON rr.room = r.code
+       LEFT JOIN tb_users ru ON r.assigned_technician = ru.id
        GROUP BY rr.id
        ORDER BY rr.report_date DESC`
     );
@@ -111,6 +114,8 @@ export async function GET(req: Request) {
         reporter: r.reporter,
         assignedTo: r.assigned_to || null,
         assignedToName: r.assigned_to_name || null,
+        roomAssignedTechnician: r.room_assigned_technician || null,
+        roomAssignedTechnicianName: r.room_assigned_name || null,
         reportDate: r.report_date ? (typeof r.report_date === 'string' ? r.report_date : r.report_date.toISOString().slice(0,10)) : null,
         priority: r.priority,
         images: unique,
