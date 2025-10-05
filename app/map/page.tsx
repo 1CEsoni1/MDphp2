@@ -745,7 +745,7 @@ export default function MapPage() {
                       แผนผังห้อง {selectedRoom.toUpperCase()}
                     </CardTitle>
                     <CardDescription className="mt-1">
-                      ห้องคอมพิวเตอร์ - คลิกที่จุดครุภัณฑ์เพื่อดูรายละเอียด
+                      ห้องคอมพิวเตอร์
                       {loading && " (กำลังโหลดข้อมูล...)"}
                     </CardDescription>
                   </div>
