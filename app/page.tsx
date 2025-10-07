@@ -185,7 +185,7 @@ export default function LoginPage() {
               )}
             </Button>
 
-            <div className="text-center">
+            {/* <div className="text-center">
               <div className="text-sm text-gray-600 mt-6">
                 <p className="font-medium mb-3 text-gray-700">ข้อมูลทดสอบ:</p>
                 <div className="space-y-2 text-xs bg-gray-50 p-4 rounded-lg">
@@ -199,7 +199,7 @@ export default function LoginPage() {
                   </div>
                 </div>
               </div>
-            </div>
+            </div> */}
           </CardContent>
         </Card>
       </div>

@@ -765,9 +765,7 @@ export default function TechnicianDashboard() {
                     )
                   )}
                   {/* If task is pending (no assignedTo), allow claiming */}
-                  {!task.assignedTo && task.status !== 'completed' && (
-                    <Button size="sm" variant="outline" onClick={() => assignToMe(task.id)}>รับงาน</Button>
-                  )}
+                  {/* Claim button removed per request */}
                 </div>
               </CardContent>
             </Card>
@@ -868,9 +866,7 @@ function TaskDetailModal({
       {/* Header */}
       <div className="flex items-center justify-between p-6 pb-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-t-2xl">
         <div className="flex items-center gap-4">
-          {onAssignToMe && task.status !== 'completed' && (
-            <Button size="sm" variant="outline" onClick={() => onAssignToMe(task.id)}>รับงาน</Button>
-          )}
+          {/* Claim button removed from modal header per request */}
           <div className="text-left">
             <h3 className="text-xl font-bold text-gray-900">รายละเอียดงานซ่อม #{task.id}</h3>
             <p className="text-sm text-gray-600">ข้อมูลครุภัณฑ์และการซ่อมบำรุง</p>
@@ -1062,13 +1058,7 @@ function TaskDetailModal({
               rows={3}
             />
           </div>
-          {task.status === 'pending' && onAssignToMe && (
-            <div className="mt-3">
-              <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white" onClick={() => onAssignToMe(task.id)}>
-                รับงาน
-              </Button>
-            </div>
-          )}
+          {/* Claim button removed from modal footer per request */}
         </div>
       </div>
     </div>

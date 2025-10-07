@@ -550,9 +550,6 @@ export default function MapPage() {
           <SelectContent>
             <SelectItem value="lc">ตึก LC</SelectItem>
             <SelectItem value="ud">ตึก UD</SelectItem>
-            <SelectItem value="building-a">อาคาร A</SelectItem>
-            <SelectItem value="building-b">อาคาร B</SelectItem>
-            <SelectItem value="building-c">อาคาร C</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -581,9 +578,6 @@ export default function MapPage() {
             <SelectItem value="lc204">ห้อง LC204</SelectItem>
             <SelectItem value="lc205">ห้อง LC205</SelectItem>
             <SelectItem value="lc207">ห้อง LC207</SelectItem>
-            <SelectItem value="room-a201">ห้อง A201</SelectItem>
-            <SelectItem value="room-a202">ห้อง A202</SelectItem>
-            <SelectItem value="room-a203">ห้อง A203</SelectItem>
           </SelectContent>
         </Select>
       </div>

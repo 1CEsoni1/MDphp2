@@ -879,32 +879,7 @@ export default function AdminDashboard() {
       <div>
         <Label className="text-sm font-medium mb-2 block">อัปเดตสถานะ</Label>
         <p className="text-xs text-gray-600 mb-2">สถานะปัจจุบัน: {selectedStatus || request.status || 'ไม่ทราบ'}</p>
-        <div className="flex flex-col sm:flex-row gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => handleStatusUpdate("assigned")}
-            disabled={assignedTo === "none"}
-            className={`bg-transparent ${selectedStatus === 'assigned' ? 'ring-2 ring-offset-1 ring-blue-200' : ''}`}
-          >
-            มอบหมายงาน
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => handleStatusUpdate("in-progress")}
-            className={`text-blue-600 border-blue-600 hover:bg-blue-50 bg-transparent ${selectedStatus === 'in-progress' ? 'ring-2 ring-offset-1 ring-purple-200' : ''}`}
-          >
-            กำลังซ่อม
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => handleStatusUpdate("completed")}
-            className={`bg-green-600 hover:bg-green-700 text-white ${selectedStatus === 'completed' ? 'opacity-90' : ''}`}
-          >
-            เสร็จสิ้น
-          </Button>
-        </div>
+        {/* Action buttons removed as per request */}
       </div>
     </div>
   )

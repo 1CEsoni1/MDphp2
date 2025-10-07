@@ -278,61 +278,7 @@ export function EquipmentDialog({
               <label className="text-sm font-medium mb-2 block">อัปเดตสถานะ</label>
               <div className="flex gap-2 flex-wrap">
                 {/* If already assigned, we do not show Start/Complete buttons here - editor opens directly */}
-                {!assignedTo && (
-                  <>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="text-blue-600 border-blue-600 hover:bg-blue-50"
-                      onClick={async () => {
-                        // otherwise claim the task and then open
-                        if (!taskId) {
-                          // fallback: just open
-                          setEditing(true)
-                          return
-                        }
-                        try {
-                          const user = auth.getCurrentUser()
-                          const userId = user?.user_id || user?.userId || user?.id || user?.name || null
-                          // patch to assign
-                          const res = await fetch(`/api/repair-requests/${encodeURIComponent(String(taskId))}`, {
-                            method: 'PATCH',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ assignedTo: userId, status: 'assigned', changedBy: userId }),
-                          })
-                          if (res.ok) {
-                            setEditing(true)
-                          } else {
-                            setEditing(true)
-                          }
-                        } catch (e) {
-                          setEditing(true)
-                        }
-                      }}
-                    >
-                      เริ่มงาน
-                    </Button>
-
-                    <Button
-                      size="sm"
-                      className="bg-green-600 hover:bg-green-700"
-                      onClick={async () => {
-                        // Quick complete: if user has attached files or note, submit as completed; else open editor
-                        if (!taskId) return
-                        if (selectedFiles.length > 0 || notes) {
-                          setSaving(true)
-                          await submitReport(taskId, notes, selectedFiles, 'completed')
-                          setSaving(false)
-                        } else {
-                          setEditing(true)
-                        }
-                      }}
-                    >
-                      <CheckCircle className="w-4 h-4 mr-1" />
-                      ซ่อมเสร็จ
-                    </Button>
-                  </>
-                )}
+                {/* Quick action buttons removed as per UX request */}
               </div>
             </div>
           )}
